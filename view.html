@@ -16,6 +16,10 @@
     ul { padding-left: 20px; margin: 8px 0; }
     li { margin-bottom: 6px; }
     .muted { color: #666; font-size: 14px; }
+    input.search { width: 100%; padding: 12px; font-size: 16px; border-radius: 6px; border: 1px solid #bbb; margin-bottom: 10px; }
+    .res { border-bottom: 1px solid #eee; padding: 8px 0; }
+    .res .t { font-weight: 600; word-break: break-word; }
+    a.loc { color: #1a73e8; }
     a.btn { display: inline-block; text-decoration: none; background: #1a73e8; color: #fff; padding: 12px 16px; border-radius: 8px; font-weight: 500; margin-top: 10px; }
   </style>
 </head>
@@ -28,6 +32,8 @@
     const params = new URLSearchParams(window.location.search);
     const id = params.get('id');
     const loc = params.get('loc');
+    const itemId = params.get('item');
+    const searchMode = params.has('search');
     const box = document.getElementById('content');
 
     function h(tag, props, ...kids) {
@@ -47,6 +53,45 @@
       const data = await res.json();
       if (!data.ok && data.rpcError) throw new Error(data.rpcError);
       return data.result;
+    }
+
+    // Location name as a link to its read-only page (plain text if it has no location)
+    function locLink(name, locId) {
+      if (!name) return 'Not assigned yet';
+      if (!locId) return name;
+      return h('a', { className: 'loc', href: 'view.html?loc=' + encodeURIComponent(locId), textContent: name });
+    }
+
+    async function initSearch() {
+      const d = await callServer('getStock');
+      box.innerHTML = '';
+      box.append(h('h3', { textContent: 'Where is it?' }));
+      const q = h('input', { className: 'search', placeholder: 'Type an item or tool name...', autocomplete: 'off' });
+      const out = h('div');
+      box.append(q, out);
+      const render = () => {
+        out.innerHTML = '';
+        const words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
+        if (!words.length) {
+          out.append(h('p', { className: 'muted', textContent: d.items.length + ' items and ' + d.tools.length + ' tools. Start typing to find where something is.' }));
+          return;
+        }
+        const hit = s => words.every(w => s.includes(w));
+        const rows = [];
+        d.items.forEach(x => { if (hit((x.name + ' ' + x.location + ' ' + x.id).toLowerCase())) rows.push({ t: 'item', x: x }); });
+        d.tools.forEach(x => { if (hit((x.name + ' ' + x.location + ' ' + x.id).toLowerCase())) rows.push({ t: 'tool', x: x }); });
+        if (!rows.length) { out.append(h('p', { className: 'muted', textContent: 'No match.' })); return; }
+        rows.slice(0, 50).forEach(r => {
+          const x = r.x;
+          const tail = r.t === 'item' ? ' - Qty ' + x.qty : ' - ' + (x.status === 'Borrowed' ? 'borrowed by ' + x.borrower : 'available');
+          out.append(h('div', { className: 'res' },
+            h('div', { className: 't', textContent: x.name }),
+            h('div', { className: 'muted' }, locLink(x.location, x.locationId), tail)));
+        });
+        if (rows.length > 50) out.append(h('p', { className: 'muted', textContent: 'Showing 50 of ' + rows.length + '. Type more to narrow down.' }));
+      };
+      q.addEventListener('input', render);
+      render();
     }
 
     async function init() {
@@ -83,6 +128,17 @@
             });
             box.append(ul);
           }
+        } else if (itemId) {
+          const it = await callServer('getItem', itemId);
+          box.innerHTML = '';
+          if (!it.found) { box.textContent = 'Item not found.'; return; }
+          box.append(
+            h('h3', { textContent: it.name + ' (' + it.id + ')' }),
+            h('p', { textContent: 'Quantity: ' + it.qty }),
+            h('p', {}, 'Stored at: ', locLink(it.location, it.locationId))
+          );
+        } else if (searchMode) {
+          await initSearch();
         } else if (id) {
           const t = await callServer('getTool', id);
           box.innerHTML = '';
@@ -92,7 +148,7 @@
           box.append(
             h('h3', { textContent: t.name + ' (' + t.id + ')' }),
             h('span', { className: 'badge ' + (isOut ? 'out' : 'ok'), textContent: isOut ? 'Borrowed by ' + t.borrower : 'Available' }),
-            h('p', { textContent: 'Stored Location: ' + (t.location || 'Not assigned yet') })
+            h('p', {}, 'Stored Location: ', locLink(t.location, t.locationId))
           );
         } else {
           window.location.replace('index.html');
