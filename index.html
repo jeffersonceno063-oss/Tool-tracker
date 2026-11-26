@@ -23,7 +23,8 @@
     .row .nm { flex: 1; min-width: 120px; word-break: break-word; }
     .row button { margin: 0; padding: 10px 12px; }
     .row input { margin: 0; }
-    input.qty { width: 84px; }
+    input.qty { width: 84px; text-align: center; }
+    .row button.step { min-width: 48px; font-size: 22px; font-weight: 700; padding: 8px 12px; }
     .muted { color: #666; font-size: 14px; }
     .warn { background: #fff3cd; border: 1px solid #e0b100; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 14px; line-height: 1.4; }
     .err-box { background: #fdecea; border: 1px solid #f5c2c0; color: #8c1d18; border-radius: 8px; padding: 10px 12px; font-size: 14px; line-height: 1.45; margin-top: 8px; display: none; }
@@ -301,9 +302,19 @@
       const draw = () => {
         row.innerHTML = '';
         const qty = h('input', { type: 'number', min: '0', value: String(it.qty), className: 'qty' });
+        let timer = null;
+        // Quick -1 / +1: updates the number right away, then saves once you stop tapping.
+        const bump = d => {
+          qty.value = String(Math.max(0, (parseInt(qty.value, 10) || 0) + d));
+          clearTimeout(timer);
+          say('Saving...');
+          timer = setTimeout(() => act('setItemQuantity', [it.id, qty.value], saved), 700);
+        };
         row.append(
           h('span', { className: 'nm', textContent: it.name }),
+          h('button', { className: 'step', textContent: '-', onclick: () => bump(-1) }),
           qty,
+          h('button', { className: 'step', textContent: '+', onclick: () => bump(1) }),
           h('button', { textContent: 'Save', onclick: () => act('setItemQuantity', [it.id, qty.value], saved) }),
           h('button', { textContent: 'Edit', onclick: edit }),
           confirmButton('Remove', 'Tap again', () => act('deleteItem', [it.id], saved)));
