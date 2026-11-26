@@ -18,16 +18,23 @@
     section { border: 1px solid #ccc; border-radius: 10px; padding: 14px; margin-bottom: 16px; background: #fff; }
     h2 { margin: 8px 0 14px; }
     h3, h4 { margin: 8px 0; }
-    #msg { font-size: 16px; min-height: 24px; font-weight: 500; }
+    .msg { font-size: 16px; min-height: 24px; font-weight: 500; }
     .row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
     .row .nm { flex: 1; min-width: 120px; word-break: break-word; }
     .row button { margin: 0; padding: 10px 12px; }
+    .row button.step { min-width: 48px; font-size: 22px; font-weight: 700; padding: 8px 12px; }
     .row input { margin: 0; }
     input.qty { width: 84px; text-align: center; }
-    .row button.step { min-width: 48px; font-size: 22px; font-weight: 700; padding: 8px 12px; }
     .muted { color: #666; font-size: 14px; }
     .warn { background: #fff3cd; border: 1px solid #e0b100; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 14px; line-height: 1.4; }
     .err-box { background: #fdecea; border: 1px solid #f5c2c0; color: #8c1d18; border-radius: 8px; padding: 10px 12px; font-size: 14px; line-height: 1.45; margin-top: 8px; display: none; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+    .tabs button { flex: 1; margin: 0; padding: 12px 4px; }
+    .tabs button.active { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+    .banner { background: #e8f0fe; border-radius: 8px; padding: 10px 12px; margin: 8px 0 12px; font-weight: 500; line-height: 1.4; }
+    .picked { background: #e6f4ea; border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+    .res { border-bottom: 1px solid #eee; padding: 8px 0; }
+    .res .t { font-weight: 600; word-break: break-word; }
     #camBox { margin: 10px 0; display: none; }
     #reader { width: 100%; border-radius: 8px; overflow: hidden; background: #000; min-height: 220px; }
     #reader video { width: 100% !important; border-radius: 8px; display: block; }
@@ -51,61 +58,107 @@
       <strong>In-app browser detected:</strong> Apps like Messenger, Facebook, or Viber often block the phone camera. Tap the <strong>&#8942;</strong> menu at the top-right and select <strong>Open in Chrome</strong>.
     </div>
 
-    <section>
-      <h3>Scan QR or Barcode</h3>
-      <input id="scan" placeholder="Scan or type code (e.g. TL-001 or LOC-001)" autocomplete="off">
-      <div class="row">
-        <button id="btnCam" class="primary" onclick="startCamera()">Scan with camera</button>
-        <button id="btnPhoto" onclick="$('photo').click()">Scan from photo</button>
-      </div>
-      <input id="photo" type="file" accept="image/*" capture="environment" style="display:none">
+    <div class="tabs">
+      <button class="tab" data-tab="scan">Scan</button>
+      <button class="tab" data-tab="transfer">Transfer</button>
+      <button class="tab" data-tab="search">Search</button>
+      <button class="tab" data-tab="manage">Manage</button>
+    </div>
 
-      <div id="camBox">
-        <div id="reader"></div>
-        <div class="cam-controls">
-          <button onclick="stopCamera()">Stop camera</button>
-          <button id="btnSwitchCam" style="display:none" onclick="switchCamera()">Switch camera</button>
-          <button id="btnTorch" style="display:none" onclick="toggleTorch()">Flashlight</button>
+    <!-- ===== SCAN TAB ===== -->
+    <div id="tab-scan">
+      <section>
+        <h3>Scan QR or Barcode</h3>
+        <input id="scan" placeholder="Scan or type code (e.g. TL-001, IT-001 or LOC-001)" autocomplete="off">
+        <div class="row">
+          <button class="primary" onclick="startCamera()">Scan with camera</button>
+          <button onclick="$('photo').click()">Scan from photo</button>
         </div>
-      </div>
+        <div id="camHost-scan"></div>
+        <div id="card"></div>
+        <p id="msg" class="msg"></p>
+      </section>
+    </div>
 
-      <div id="camHelp" class="err-box"></div>
-      <div id="card"></div>
-      <p id="msg"></p>
-    </section>
+    <!-- ===== TRANSFER TAB ===== -->
+    <div id="tab-transfer" style="display:none">
+      <section>
+        <h3>Transfer</h3>
+        <input id="tScan" placeholder="Scan or type here" autocomplete="off">
+        <div class="row">
+          <button class="primary" onclick="startCamera()">Scan with camera</button>
+          <button onclick="$('photo').click()">Scan from photo</button>
+          <button onclick="resetTransfer()">Start over</button>
+        </div>
+        <div id="camHost-transfer"></div>
+        <div id="tBody"></div>
+        <p id="tmsg" class="msg"></p>
+      </section>
+    </div>
 
-    <section>
-      <h3>Add a tool</h3>
-      <input id="newName" placeholder="Tool name (e.g. Hammer)">
-      <button onclick="addToolUi()">Add + create QR</button>
-    </section>
+    <!-- ===== SEARCH TAB ===== -->
+    <div id="tab-search" style="display:none">
+      <section>
+        <h3>Search</h3>
+        <input id="q" placeholder="Type an item or tool name..." autocomplete="off">
+        <div id="qRes"></div>
+        <p id="smsg" class="msg"></p>
+      </section>
+    </div>
 
-    <section>
-      <h3>Add a location</h3>
-      <p class="muted">A rack, shelf or room. Scanning its QR shows the items stored there.</p>
-      <input id="newLoc" placeholder="Location name (e.g. Rack A)">
-      <button onclick="addLocationUi()">Add + create QR</button>
-    </section>
+    <!-- ===== MANAGE TAB ===== -->
+    <div id="tab-manage" style="display:none">
+      <section>
+        <h3>Add a tool</h3>
+        <input id="newName" placeholder="Tool name (e.g. Hammer)">
+        <button onclick="addToolUi()">Add + create QR</button>
+      </section>
 
-    <section>
-      <h3>Manage</h3>
-      <button onclick="showManage('locations')">Locations</button>
-      <button onclick="showManage('tools')">Tools</button>
-      <div id="manage"></div>
-    </section>
+      <section>
+        <h3>Add a location</h3>
+        <p class="muted">A rack, shelf or room. Scanning its QR shows the items stored there.</p>
+        <input id="newLoc" placeholder="Location name (e.g. Rack A)">
+        <button onclick="addLocationUi()">Add + create QR</button>
+      </section>
 
-    <section>
-      <h3>Labels</h3>
-      <button onclick="loadAllLocs()">All location labels</button>
-      <button onclick="loadAll()">All tool labels</button>
-      <button onclick="window.print()">Print labels</button>
-      <button onclick="clearLabels()">Clear labels</button>
-    </section>
+      <section>
+        <h3>Manage</h3>
+        <button onclick="showManage('locations')">Locations</button>
+        <button onclick="showManage('tools')">Tools</button>
+        <button onclick="showManage('items')">Items</button>
+        <div id="manage"></div>
+      </section>
+
+      <section>
+        <h3>Labels</h3>
+        <button onclick="loadAllLocs()">All location labels</button>
+        <button onclick="loadAll()">All tool labels</button>
+        <button onclick="loadAllItems()">All item labels</button>
+        <button onclick="loadSearchLabel()">Search QR label</button>
+        <button onclick="window.print()">Print labels</button>
+        <button onclick="clearLabels()">Clear labels</button>
+        <p id="mmsg" class="msg"></p>
+      </section>
+    </div>
   </div>
 
   <div id="labels"></div>
   <div id="photoReaderHidden" style="display:none"></div>
   <datalist id="locs"></datalist>
+  <input id="photo" type="file" accept="image/*" capture="environment" style="display:none">
+
+  <!-- Camera box: moved between the Scan and Transfer tabs -->
+  <div id="camShared">
+    <div id="camBox">
+      <div id="reader"></div>
+      <div class="cam-controls">
+        <button onclick="stopCamera()">Stop camera</button>
+        <button id="btnSwitchCam" style="display:none" onclick="switchCamera()">Switch camera</button>
+        <button id="btnTorch" style="display:none" onclick="toggleTorch()">Flashlight</button>
+      </div>
+    </div>
+    <div id="camHelp" class="err-box"></div>
+  </div>
 
   <script>
     const $ = id => document.getElementById(id);
@@ -113,9 +166,13 @@
     // Base URL of this GitHub Pages site (used to build read-only view.html QR links)
     const SITE_BASE_URL = new URL('.', window.location.href).href;
 
-    const scan = $('scan'), card = $('card'), msg = $('msg'), manage = $('manage');
+    const card = $('card'), manage = $('manage');
     const isTouch = matchMedia('(pointer: coarse)').matches;
+    const MSG_ID = { scan: 'msg', transfer: 'tmsg', search: 'smsg', manage: 'mmsg' };
+    let activeTab = 'scan';
     let manageMode = null;
+    let awaitingRack = null;     // { kind: 'return' | 'set', id } - next rack scan completes it
+    let stockCache = null;       // { t, data } for the Search tab
 
     function h(tag, props, ...kids) {
       const e = document.createElement(tag);
@@ -125,13 +182,37 @@
     }
 
     function say(text, ok) {
-      msg.textContent = text || '';
-      msg.style.color = ok === undefined ? '#111' : (ok ? '#0d7a2c' : '#b00020');
+      const m = $(MSG_ID[activeTab]);
+      m.textContent = text || '';
+      m.style.color = ok === undefined ? '#111' : (ok ? '#0d7a2c' : '#b00020');
     }
 
     function fail(err) {
       say('Error: ' + (err && err.message ? err.message : err), false);
     }
+
+    // ----- Tabs -----
+    function showTab(name) {
+      if (name === activeTab) return;
+      stopCamera();
+      awaitingRack = null;
+      activeTab = name;
+      ['scan', 'transfer', 'search', 'manage'].forEach(n => {
+        $('tab-' + n).style.display = n === name ? 'block' : 'none';
+      });
+      document.querySelectorAll('.tabs .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+      $('labels').style.display = (name === 'scan' || name === 'manage') ? 'flex' : 'none';
+      if (name === 'scan' || name === 'transfer') $('camHost-' + name).append($('camBox'), $('camHelp'));
+      showCamHelp('');
+      if (name === 'search') { renderSearch(); loadStock(); }
+      if (name === 'manage' && manageMode) refreshManage();
+      window.scrollTo({ top: 0 });
+      if (!isTouch) {
+        const f = { scan: 'scan', transfer: 'tScan', search: 'q' }[name];
+        if (f) $(f).focus();
+      }
+    }
+    document.querySelectorAll('.tabs .tab').forEach(b => b.onclick = () => showTab(b.dataset.tab));
 
     // ----- Google Apps Script Backend RPC Bridge -----
     function isConfigured() {
@@ -181,6 +262,7 @@
       callServer(fn, ...args).then(r => {
         if (!r.ok) { say(r.msg, false); return; }
         say(r.msg, true);
+        stockCache = null;
         loadLocs();
         if (onOk) onOk(r);
       }).catch(fail);
@@ -195,35 +277,81 @@
       input.focus();
     }
 
-    // ----- Scanning Router (camera, photo, Bluetooth scanner, URL params, or typing) -----
-    const LOC_ID = /^LOC-\d+$/i, TOOL_ID = /^TL-\d+$/i;
+    // - / + / number / Save for an item's quantity. -/+ save by themselves after a short pause.
+    function qtyEditor(itemId, startQty, after) {
+      const qty = h('input', { type: 'number', min: '0', value: String(startQty), className: 'qty' });
+      let timer = null;
+      const commit = () => act('setItemQuantity', [itemId, qty.value], after);
+      const bump = d => {
+        qty.value = String(Math.max(0, (parseInt(qty.value, 10) || 0) + d));
+        clearTimeout(timer);
+        say('Saving...');
+        timer = setTimeout(commit, 700);
+      };
+      return [
+        h('button', { className: 'step', textContent: '-', onclick: () => bump(-1) }),
+        qty,
+        h('button', { className: 'step', textContent: '+', onclick: () => bump(1) }),
+        h('button', { textContent: 'Save', onclick: () => { clearTimeout(timer); commit(); } })
+      ];
+    }
+
+    // ----- Scanning Router -----
+    const LOC_ID = /^LOC-\d+$/i, TOOL_ID = /^TL-\d+$/i, ITEM_ID = /^IT-\d+$/i;
+
+    function classify(raw) {
+      if (/[?&]loc=/i.test(raw) || LOC_ID.test(raw)) return 'loc';
+      if (/[?&]item=/i.test(raw) || ITEM_ID.test(raw)) return 'item';
+      if (/[?&]id=/i.test(raw) || TOOL_ID.test(raw)) return 'tool';
+      if (/[?&]search=/i.test(raw)) return 'search';
+      return null;
+    }
+
+    function idFrom(raw, param) {
+      const m = new RegExp('[?&]' + param + '=([^&#\\s]+)', 'i').exec(raw);
+      return (m ? decodeURIComponent(m[1]) : raw).trim().toUpperCase();
+    }
 
     function handleScan(raw) {
       raw = (raw || '').trim();
       if (!raw) return;
-      if (/[?&]loc=/i.test(raw) || LOC_ID.test(raw)) {
-        openLocation(raw);
-      } else if (/[?&]id=/i.test(raw) || TOOL_ID.test(raw)) {
-        lookup(raw);
-      } else {
-        say('Not a registered tool/location code: ' + raw.slice(0, 60), false);
+      if (activeTab === 'transfer') { transferScan(raw, classify(raw)); return; }
+      const kind = classify(raw);
+      if (kind === 'search') { showTab('search'); return; }
+      if (kind === 'loc' && awaitingRack) {
+        const a = awaitingRack;
+        awaitingRack = null;
+        act(a.kind === 'return' ? 'returnTool' : 'setLocation', [a.id, raw], r => lookup(a.id, r.msg, true));
+        return;
       }
+      awaitingRack = null;
+      if (kind === 'loc') openLocation(raw);
+      else if (kind === 'item') lookupItem(raw);
+      else if (kind === 'tool') lookup(raw);
+      else say('Not a registered tool/item/location code: ' + raw.slice(0, 60), false);
     }
 
-    scan.addEventListener('keydown', e => {
-      if (e.key === 'Enter') {
-        handleScan(scan.value);
-        scan.value = '';
-      }
+    $('scan').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { handleScan($('scan').value); $('scan').value = ''; }
+    });
+    $('tScan').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { handleScan($('tScan').value); $('tScan').value = ''; }
     });
 
     // ----- Tools -----
     function lookup(raw, text, ok) {
+      showTab('scan');
       say('One moment...');
       callServer('getTool', raw).then(t => {
         showTool(t);
         if (text) say(text, ok);
       }).catch(fail);
+    }
+
+    function armRack(kind, id) {
+      awaitingRack = { kind: kind, id: id };
+      say('Now scan the QR of the rack.', undefined);
+      startCamera();
     }
 
     function showTool(t) {
@@ -241,11 +369,13 @@
       if (!t.location) {
         card.append(h('p', { textContent: 'No location yet. Where is this stored?' }));
         const loc = locInput('e.g. Rack A, Storage room');
-        card.append(loc, h('button', {
-          className: 'primary',
-          textContent: 'Save location',
-          onclick: () => act('setLocation', [t.id, loc.value], r => lookup(t.id, r.msg, true))
-        }));
+        card.append(loc,
+          h('button', {
+            className: 'primary',
+            textContent: 'Save location',
+            onclick: () => act('setLocation', [t.id, loc.value], r => lookup(t.id, r.msg, true))
+          }),
+          h('button', { textContent: 'Scan rack QR', onclick: () => armRack('set', t.id) }));
       } else if (t.status !== 'Borrowed') {
         card.append(h('p', { textContent: 'Location: ' + t.location + ' | Available' }));
         const who = h('input', { placeholder: 'Who is borrowing it?' });
@@ -255,13 +385,15 @@
           onclick: () => act('borrowTool', [t.id, who.value], r => lookup(t.id, r.msg, true))
         }));
       } else {
-        card.append(h('p', { textContent: 'Borrowed by ' + t.borrower + '. Where is it being returned?' }));
+        card.append(h('p', { textContent: 'Borrowed by ' + t.borrower + '. Scan the rack QR where it is being returned, or type the location.' }));
         const loc = locInput('Location', t.location);
-        card.append(loc, h('button', {
-          className: 'primary',
-          textContent: 'Return',
-          onclick: () => act('returnTool', [t.id, loc.value], r => lookup(t.id, r.msg, true))
-        }));
+        card.append(
+          h('button', { className: 'primary', textContent: 'Scan rack QR to return', onclick: () => armRack('return', t.id) }),
+          loc,
+          h('button', {
+            textContent: 'Return',
+            onclick: () => act('returnTool', [t.id, loc.value], r => lookup(t.id, r.msg, true))
+          }));
       }
 
       const bar = h('div', { className: 'row' });
@@ -287,8 +419,49 @@
       }
     }
 
+    // ----- Single inventory item (scanned from its own QR) -----
+    function lookupItem(raw, text, ok) {
+      showTab('scan');
+      say('One moment...');
+      callServer('getItem', raw).then(it => {
+        showItem(it);
+        if (text) say(text, ok);
+      }).catch(fail);
+    }
+
+    function showItem(it) {
+      card.innerHTML = '';
+      if (!it.found) { say('Item not found.', false); return; }
+      say('');
+      card.append(
+        h('h3', { textContent: it.name + ' (' + it.id + ')' }),
+        h('p', { textContent: 'Stored at: ' + (it.location || 'no location') }));
+      const q = h('div', { className: 'row' });
+      q.append(...qtyEditor(it.id, it.qty, res => lookupItem(it.id, res.msg, true)));
+      card.append(q);
+      const bar = h('div', { className: 'row' });
+      bar.append(
+        h('button', {
+          className: 'primary',
+          textContent: 'Move this item',
+          onclick: () => startTransferWith(it)
+        }),
+        h('button', {
+          textContent: 'Show QR label',
+          onclick: () => { makeItemLabel(it.id, it.name); say('Label added at the bottom of the page. Use Print labels.', true); }
+        }));
+      card.append(bar);
+      if (it.location) {
+        card.append(h('button', {
+          textContent: 'See everything in ' + it.location,
+          onclick: () => openLocation(it.locationId || it.location)
+        }));
+      }
+    }
+
     // ----- Locations / Inventory -----
     function openLocation(raw, text, ok) {
+      showTab('scan');
       say('One moment...');
       callServer('getLocation', raw).then(r => {
         showLocation(r);
@@ -301,22 +474,11 @@
       const saved = res => openLocation(r.id, res.msg, true);
       const draw = () => {
         row.innerHTML = '';
-        const qty = h('input', { type: 'number', min: '0', value: String(it.qty), className: 'qty' });
-        let timer = null;
-        // Quick -1 / +1: updates the number right away, then saves once you stop tapping.
-        const bump = d => {
-          qty.value = String(Math.max(0, (parseInt(qty.value, 10) || 0) + d));
-          clearTimeout(timer);
-          say('Saving...');
-          timer = setTimeout(() => act('setItemQuantity', [it.id, qty.value], saved), 700);
-        };
         row.append(
           h('span', { className: 'nm', textContent: it.name }),
-          h('button', { className: 'step', textContent: '-', onclick: () => bump(-1) }),
-          qty,
-          h('button', { className: 'step', textContent: '+', onclick: () => bump(1) }),
-          h('button', { textContent: 'Save', onclick: () => act('setItemQuantity', [it.id, qty.value], saved) }),
+          ...qtyEditor(it.id, it.qty, saved),
           h('button', { textContent: 'Edit', onclick: edit }),
+          h('button', { textContent: 'Label', onclick: () => { makeItemLabel(it.id, it.name); say('Label added at the bottom of the page.', true); } }),
           confirmButton('Remove', 'Tap again', () => act('deleteItem', [it.id], saved)));
       };
       const edit = () => {
@@ -389,6 +551,232 @@
       }).catch(() => {});
     }
 
+    // ----- Transfer tab: rack -> item -> qty -> destination rack -----
+    const T = { src: null, pick: null, review: null };
+
+    function resetTransfer() {
+      T.src = T.pick = T.review = null;
+      say('');
+      renderTransfer();
+    }
+
+    function startTransferWith(it) {
+      if (!it.location) { say('Set this item\'s location first.', false); return; }
+      showTab('transfer');
+      callServer('getLocation', it.locationId || it.location).then(r => {
+        if (!r.found) { say('Location not found.', false); return; }
+        T.src = r; T.pick = null; T.review = null;
+        pickFromSource('item', it.id);
+      }).catch(fail);
+    }
+
+    function loadSource(raw, thenPick) {
+      say('One moment...');
+      return callServer('getLocation', raw).then(r => {
+        if (!r.found) { say('Rack not found: ' + raw.slice(0, 40), false); return; }
+        T.src = r; T.pick = null; T.review = null;
+        say('');
+        if (thenPick) pickFromSource(thenPick.kind, thenPick.id); else renderTransfer();
+      }).catch(fail);
+    }
+
+    function pickFromSource(kind, id) {
+      id = id.toUpperCase();
+      let found = null;
+      if (kind === 'item') {
+        const it = T.src.items.find(x => x.id.toUpperCase() === id);
+        if (it) found = { kind: 'item', id: it.id, name: it.name, max: it.qty };
+      } else {
+        const t = T.src.tools.find(x => x.id.toUpperCase() === id);
+        if (t) {
+          if (t.status === 'Borrowed') {
+            say(t.name + ' is borrowed by ' + t.borrower + '. Return it first from the Scan tab.', false);
+            renderTransfer();
+            return;
+          }
+          found = { kind: 'tool', id: t.id, name: t.name, max: 1 };
+        }
+      }
+      if (!found) { say(id + ' is not stored in ' + T.src.name + '.', false); renderTransfer(); return; }
+      if (found.kind === 'item' && found.max < 1) { say(found.name + ' has quantity 0 here.', false); renderTransfer(); return; }
+      T.pick = found;
+      T.review = null;
+      say('');
+      renderTransfer();
+    }
+
+    function transferScan(raw, kind) {
+      if (kind === 'search') { showTab('search'); return; }
+
+      // Step 1: choose the source rack
+      if (!T.src) {
+        if (kind === 'loc') { loadSource(raw); return; }
+        if (kind === 'item' || kind === 'tool') {
+          const fn = kind === 'item' ? 'getItem' : 'getTool';
+          const id = idFrom(raw, kind === 'item' ? 'item' : 'id');
+          say('One moment...');
+          callServer(fn, id).then(x => {
+            if (!x.found) { say('Not found: ' + id, false); return; }
+            if (!x.location) { say(x.name + ' has no location yet.', false); return; }
+            return loadSource(x.locationId || x.location, { kind: kind, id: id });
+          }).catch(fail);
+          return;
+        }
+        loadSource(raw);   // typed rack name
+        return;
+      }
+
+      // Step 2: choose the item or tool
+      if (!T.pick) {
+        if (kind === 'loc') { loadSource(raw); return; }
+        if (kind === 'item' || kind === 'tool') { pickFromSource(kind, idFrom(raw, kind === 'item' ? 'item' : 'id')); return; }
+        const key = raw.toLowerCase();
+        const all = T.src.items.map(x => ({ kind: 'item', id: x.id, name: x.name }))
+          .concat(T.src.tools.map(x => ({ kind: 'tool', id: x.id, name: x.name })));
+        const exact = all.filter(x => x.name.toLowerCase() === key);
+        const part = all.filter(x => x.name.toLowerCase().includes(key));
+        const hit = exact.length === 1 ? exact : part;
+        if (hit.length === 1) pickFromSource(hit[0].kind, hit[0].id);
+        else if (!hit.length) say('Nothing named "' + raw.slice(0, 40) + '" in ' + T.src.name + '.', false);
+        else say(hit.length + ' items match. Tap the one you want.', false);
+        return;
+      }
+
+      // Step 3: choose the destination rack
+      if (kind === 'item' || kind === 'tool') { pickFromSource(kind, idFrom(raw, kind === 'item' ? 'item' : 'id')); return; }
+      reviewMove(raw);
+    }
+
+    function reviewMove(destRaw) {
+      const p = T.pick;
+      let qty = 1;
+      if (p.kind === 'item') {
+        const qi = $('tQty');
+        qty = qi ? parseInt(qi.value, 10) : p.max;
+        if (!(qty >= 1) || qty > p.max) { say('Quantity must be 1 to ' + p.max + '.', false); return; }
+      }
+      say('One moment...');
+      callServer('getLocation', destRaw).then(r => {
+        if (!r.found) { say('Destination rack not found: ' + destRaw.slice(0, 40), false); return; }
+        if (r.id === T.src.id) { say('That is the same rack the item is already in.', false); return; }
+        T.review = { destId: r.id, destName: r.name, qty: qty };
+        say('');
+        renderTransfer();
+      }).catch(fail);
+    }
+
+    function confirmMove() {
+      const p = T.pick, rv = T.review;
+      const fn = p.kind === 'tool' ? 'moveTool' : 'moveItem';
+      const args = p.kind === 'tool' ? [p.id, rv.destId] : [p.id, rv.destId, rv.qty];
+      say('Moving...');
+      callServer(fn, ...args).then(r => {
+        if (!r.ok) { say(r.msg, false); return; }
+        stockCache = null;
+        loadLocs();
+        return callServer('getLocation', T.src.id).then(s => {
+          T.src = s; T.pick = null; T.review = null;
+          renderTransfer();
+          say(r.msg, true);
+        });
+      }).catch(fail);
+    }
+
+    function renderTransfer() {
+      const b = $('tBody');
+      b.innerHTML = '';
+      const banner = t => b.append(h('div', { className: 'banner', textContent: t }));
+
+      if (!T.src) {
+        banner('Step 1 of 3: scan the QR of the rack you are moving FROM. You can also scan an item QR or type the rack name.');
+        return;
+      }
+
+      b.append(h('p', { textContent: 'From: ' + T.src.name + ' (' + T.src.id + ')' }));
+
+      // Step 4: confirm
+      if (T.pick && T.review) {
+        const p = T.pick, rv = T.review;
+        const what = p.kind === 'item' ? rv.qty + ' x ' + p.name : p.name + ' (' + p.id + ')';
+        banner('Move ' + what + ' from ' + T.src.name + ' to ' + rv.destName + '?');
+        b.append(
+          h('button', { className: 'primary', textContent: 'Confirm move', onclick: confirmMove }),
+          h('button', { textContent: 'Back', onclick: () => { T.review = null; renderTransfer(); } }));
+        return;
+      }
+
+      // Step 3: destination
+      if (T.pick) {
+        const p = T.pick;
+        const box = h('div', { className: 'picked' });
+        box.append(h('div', { textContent: 'Moving: ' + p.name + ' (' + p.id + ')' }));
+        if (p.kind === 'item') {
+          box.append(
+            h('div', { className: 'muted', textContent: 'How many? (there are ' + p.max + ')' }),
+            h('input', { id: 'tQty', type: 'number', min: '1', max: String(p.max), value: String(p.max), className: 'qty' }));
+        }
+        b.append(box);
+        banner('Step 3 of 3: scan the QR of the rack you are moving TO, or type its name below.');
+        const dest = locInput('Destination rack name');
+        b.append(dest,
+          h('button', { className: 'primary', textContent: 'Review move', onclick: () => { if (dest.value.trim()) reviewMove(dest.value.trim()); } }),
+          h('button', { textContent: 'Pick another item', onclick: () => { T.pick = null; renderTransfer(); } }));
+        return;
+      }
+
+      // Step 2: choose item
+      banner('Step 2 of 3: scan the QR of the item, tap it below, or type its name.');
+      if (!T.src.items.length && !T.src.tools.length) b.append(h('p', { className: 'muted', textContent: 'Nothing is stored in this rack.' }));
+      T.src.items.forEach(it => b.append(h('div', { className: 'row' },
+        h('span', { className: 'nm', textContent: it.name + ' - Qty ' + it.qty }),
+        h('button', { textContent: 'Pick', onclick: () => pickFromSource('item', it.id) }))));
+      T.src.tools.forEach(t => b.append(h('div', { className: 'row' },
+        h('span', { className: 'nm', textContent: t.name + ' (' + t.id + ') - ' + (t.status === 'Borrowed' ? 'borrowed by ' + t.borrower : 'available') }),
+        h('button', { textContent: 'Pick', onclick: () => pickFromSource('tool', t.id) }))));
+    }
+
+    // ----- Search tab -----
+    function loadStock() {
+      if (stockCache && Date.now() - stockCache.t < 60000) { renderSearch(); return; }
+      if (!isConfigured()) { say('Set your Google Apps Script /exec URL in config.js first.', false); return; }
+      say('Loading...');
+      callServer('getStock').then(d => {
+        stockCache = { t: Date.now(), data: d };
+        say('');
+        renderSearch();
+      }).catch(fail);
+    }
+
+    function renderSearch() {
+      const out = $('qRes');
+      out.innerHTML = '';
+      if (!stockCache) return;
+      const d = stockCache.data;
+      const words = $('q').value.toLowerCase().split(/\s+/).filter(Boolean);
+      if (!words.length) {
+        out.append(h('p', { className: 'muted', textContent: d.items.length + ' items and ' + d.tools.length + ' tools. Start typing to find where something is.' }));
+        return;
+      }
+      const hit = s => words.every(w => s.includes(w));
+      const rows = [];
+      d.items.forEach(it => { if (hit((it.name + ' ' + it.location + ' ' + it.id).toLowerCase())) rows.push({ type: 'item', x: it }); });
+      d.tools.forEach(t => { if (hit((t.name + ' ' + t.location + ' ' + t.id).toLowerCase())) rows.push({ type: 'tool', x: t }); });
+      if (!rows.length) { out.append(h('p', { className: 'muted', textContent: 'No match.' })); return; }
+      rows.slice(0, 50).forEach(r => {
+        const x = r.x;
+        const sub = r.type === 'item'
+          ? (x.location || 'no location') + ' - Qty ' + x.qty
+          : (x.location || 'no location') + ' - ' + (x.status === 'Borrowed' ? 'borrowed by ' + x.borrower : 'available');
+        out.append(h('div', { className: 'res row' },
+          h('div', { className: 'nm' },
+            h('div', { className: 't', textContent: x.name + (r.type === 'tool' ? ' (' + x.id + ')' : '') }),
+            h('div', { className: 'muted', textContent: sub })),
+          h('button', { textContent: 'Open', onclick: () => { r.type === 'item' ? lookupItem(x.id) : lookup(x.id); } })));
+      });
+      if (rows.length > 50) out.append(h('p', { className: 'muted', textContent: 'Showing 50 of ' + rows.length + '. Type more to narrow down.' }));
+    }
+    $('q').addEventListener('input', renderSearch);
+
     // ----- Manage Lists -----
     function showManage(mode) { manageMode = mode; refreshManage(); }
 
@@ -398,6 +786,8 @@
         callServer('listLocations').then(renderManageLocations).catch(fail);
       } else if (manageMode === 'tools') {
         callServer('listTools').then(renderManageTools).catch(fail);
+      } else if (manageMode === 'items') {
+        callServer('getStock').then(d => renderManageItems(d.items)).catch(fail);
       }
     }
 
@@ -411,7 +801,7 @@
           row.innerHTML = '';
           row.append(
             h('span', { className: 'nm', textContent: l.name + ' (' + l.items + ' items, ' + l.tools + ' tools)' }),
-            h('button', { textContent: 'Open', onclick: () => { openLocation(l.id); window.scrollTo({ top: 0, behavior: 'smooth' }); } }),
+            h('button', { textContent: 'Open', onclick: () => openLocation(l.id) }),
             h('button', { textContent: 'Rename', onclick: () => editNameUi(row, l.name, draw, v => act('renameLocation', [l.id, v], refreshManage)) }),
             h('button', { textContent: 'Label', onclick: () => { makeLocLabel(l.id, l.name); say('Label added at the bottom of the page.', true); } }),
             confirmButton('Delete', 'Tap again', () => act('deleteLocation', [l.id], refreshManage)));
@@ -432,7 +822,7 @@
           row.innerHTML = '';
           row.append(
             h('span', { className: 'nm', textContent: t.name + ' (' + t.id + ') - ' + where }),
-            h('button', { textContent: 'Open', onclick: () => { lookup(t.id); window.scrollTo({ top: 0, behavior: 'smooth' }); } }),
+            h('button', { textContent: 'Open', onclick: () => lookup(t.id) }),
             h('button', { textContent: 'Rename', onclick: () => editNameUi(row, t.name, draw, v => act('renameTool', [t.id, v], refreshManage)) }),
             h('button', { textContent: 'Label', onclick: () => { makeLabel(t.id, t.name); say('Label added at the bottom of the page.', true); } }),
             confirmButton('Delete', 'Tap again', () => act('deleteTool', [t.id], refreshManage)));
@@ -442,26 +832,34 @@
       });
     }
 
+    function renderManageItems(list) {
+      manage.innerHTML = '';
+      manage.append(h('h4', { textContent: 'Items (' + list.length + ')' }));
+      if (!list.length) manage.append(h('p', { className: 'muted', textContent: 'No items yet. Open a location to add items.' }));
+      list.forEach(it => {
+        manage.append(h('div', { className: 'row' },
+          h('span', { className: 'nm', textContent: it.name + ' (' + it.id + ') - ' + (it.location || 'no location') + ' - Qty ' + it.qty }),
+          h('button', { textContent: 'Open', onclick: () => lookupItem(it.id) }),
+          h('button', { textContent: 'Label', onclick: () => { makeItemLabel(it.id, it.name); say('Label added at the bottom of the page.', true); } })));
+      });
+    }
+
     // ----- Printable QR Labels -----
     function makeQr(parent, link) {
       new QRCode(parent, { text: link, width: 128, height: 128, correctLevel: QRCode.CorrectLevel.L });
     }
 
-    function makeLabel(id, name) {
+    function makeLinkLabel(link, title, sub) {
       const d = h('div', { className: 'label' });
       const q = h('div');
-      makeQr(q, SITE_BASE_URL + 'view.html?id=' + encodeURIComponent(id));
-      d.append(q, h('div', { className: 'id', textContent: name }), h('div', { className: 'name', textContent: id }));
+      makeQr(q, link);
+      d.append(q, h('div', { className: 'id', textContent: title }), h('div', { className: 'name', textContent: sub }));
       $('labels').appendChild(d);
     }
 
-    function makeLocLabel(id, name) {
-      const d = h('div', { className: 'label' });
-      const q = h('div');
-      makeQr(q, SITE_BASE_URL + 'view.html?loc=' + encodeURIComponent(id));
-      d.append(q, h('div', { className: 'id', textContent: name }), h('div', { className: 'name', textContent: id }));
-      $('labels').appendChild(d);
-    }
+    function makeLabel(id, name) { makeLinkLabel(SITE_BASE_URL + 'view.html?id=' + encodeURIComponent(id), name, id); }
+    function makeLocLabel(id, name) { makeLinkLabel(SITE_BASE_URL + 'view.html?loc=' + encodeURIComponent(id), name, id); }
+    function makeItemLabel(id, name) { makeLinkLabel(SITE_BASE_URL + 'view.html?item=' + encodeURIComponent(id), name, id); }
 
     function addToolUi() {
       say('One moment...');
@@ -469,6 +867,7 @@
         if (!r.ok) { say(r.msg, false); return; }
         makeLabel(r.id, r.name);
         $('newName').value = '';
+        stockCache = null;
         say('Added: ' + r.id + ' - ' + r.name + '. Label is at the bottom of the page.', true);
         if (manageMode === 'tools') refreshManage();
       }).catch(fail);
@@ -504,6 +903,20 @@
       }).catch(fail);
     }
 
+    function loadAllItems() {
+      clearLabels();
+      say('Loading item labels...');
+      callServer('getStock').then(d => {
+        d.items.forEach(it => makeItemLabel(it.id, it.name));
+        say('Loaded ' + d.items.length + ' item label(s).', true);
+      }).catch(fail);
+    }
+
+    function loadSearchLabel() {
+      makeLinkLabel(SITE_BASE_URL + 'view.html?search=1', 'Search items', 'Scan to find where things are');
+      say('Search label added at the bottom of the page.', true);
+    }
+
     function clearLabels() { $('labels').innerHTML = ''; }
 
     // ----- Android Camera + QR / Barcode Scanner (html5-qrcode + Native BarcodeDetector) -----
@@ -517,6 +930,7 @@
     let camerasList = [];
     let currentCamIdx = -1;
     let torchOn = false;
+    let lastScan = { text: '', t: 0 };
 
     function loadScript(urls) {
       return new Promise((resolve, reject) => {
@@ -582,6 +996,7 @@
       showCamHelp('');
       scanBusy = false;
       torchOn = false;
+      lastScan = { text: '', t: 0 };
 
       if (!window.isSecureContext) {
         showCamHelp(explainCameraError('InsecureContext'));
@@ -615,7 +1030,17 @@
       };
 
       const onDecoded = async decodedText => {
-        if (scanBusy || !decodedText) return;
+        if (!decodedText) return;
+        if (activeTab === 'transfer') {
+          // Transfer needs several scans in a row: keep the camera on, ignore the same code for 2.5s.
+          const now = Date.now();
+          if (decodedText === lastScan.text && now - lastScan.t < 2500) return;
+          lastScan = { text: decodedText, t: now };
+          if (navigator.vibrate) navigator.vibrate(80);
+          handleScan(decodedText);
+          return;
+        }
+        if (scanBusy) return;
         scanBusy = true;
         if (navigator.vibrate) navigator.vibrate(80);
         await stopCamera();
@@ -746,7 +1171,7 @@
 
     window.addEventListener('pagehide', () => { stopCamera(); });
 
-    // ----- Startup Checks -----
+    // ----- Startup -----
     if (!isConfigured()) {
       $('configWarn').style.display = 'block';
     }
@@ -754,13 +1179,17 @@
       $('webviewWarn').style.display = 'block';
     }
 
+    // Initial tab state (scan tab is shown first)
+    document.querySelectorAll('.tabs .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'scan'));
+    $('camHost-scan').append($('camBox'), $('camHelp'));
+    renderTransfer();
     loadLocs();
 
-    // Auto-open tool or location if navigated from view.html (?id=... or ?loc=...)
+    // Auto-open tool, item or location if navigated with ?id=, ?item= or ?loc=
     if (window.location.search) {
       handleScan(window.location.search);
     } else if (!isTouch) {
-      scan.focus();
+      $('scan').focus();
     }
   </script>
 </body>
