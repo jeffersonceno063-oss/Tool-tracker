@@ -29,7 +29,9 @@
     .warn { background: #fff3cd; border: 1px solid #e0b100; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 14px; line-height: 1.4; }
     .err-box { background: #fdecea; border: 1px solid #f5c2c0; color: #8c1d18; border-radius: 8px; padding: 10px 12px; font-size: 14px; line-height: 1.45; margin-top: 8px; display: none; }
     .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
-    .tabs button { flex: 1; margin: 0; padding: 12px 4px; }
+    .tabs button { flex: 1; margin: 0; padding: 12px 2px; font-size: 14px; }
+    .low { background: #fff3cd; border: 1px solid #e0b100; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+    select.type { margin: 0; width: auto; }
     .tabs button.active { background: #1a73e8; color: #fff; border-color: #1a73e8; }
     .banner { background: #e8f0fe; border-radius: 8px; padding: 10px 12px; margin: 8px 0 12px; font-weight: 500; line-height: 1.4; }
     .picked { background: #e6f4ea; border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
@@ -62,6 +64,7 @@
       <button class="tab" data-tab="scan">Scan</button>
       <button class="tab" data-tab="transfer">Transfer</button>
       <button class="tab" data-tab="search">Search</button>
+      <button class="tab" data-tab="stock">Stock</button>
       <button class="tab" data-tab="manage">Manage</button>
     </div>
 
@@ -103,6 +106,17 @@
         <input id="q" placeholder="Type an item or tool name..." autocomplete="off">
         <div id="qRes"></div>
         <p id="smsg" class="msg"></p>
+      </section>
+    </div>
+
+    <!-- ===== STOCK TAB ===== -->
+    <div id="tab-stock" style="display:none">
+      <section>
+        <h3>Stock / Consumables</h3>
+        <div id="lowBox"></div>
+        <input id="sq" placeholder="Filter consumables..." autocomplete="off">
+        <div id="sRes"></div>
+        <p id="kmsg" class="msg"></p>
       </section>
     </div>
 
@@ -168,7 +182,7 @@
 
     const card = $('card'), manage = $('manage');
     const isTouch = matchMedia('(pointer: coarse)').matches;
-    const MSG_ID = { scan: 'msg', transfer: 'tmsg', search: 'smsg', manage: 'mmsg' };
+    const MSG_ID = { scan: 'msg', transfer: 'tmsg', search: 'smsg', stock: 'kmsg', manage: 'mmsg' };
     let activeTab = 'scan';
     let manageMode = null;
     let awaitingRack = null;     // { kind: 'return' | 'set', id } - next rack scan completes it
@@ -197,7 +211,7 @@
       stopCamera();
       awaitingRack = null;
       activeTab = name;
-      ['scan', 'transfer', 'search', 'manage'].forEach(n => {
+      ['scan', 'transfer', 'search', 'stock', 'manage'].forEach(n => {
         $('tab-' + n).style.display = n === name ? 'block' : 'none';
       });
       document.querySelectorAll('.tabs .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
@@ -205,10 +219,11 @@
       if (name === 'scan' || name === 'transfer') $('camHost-' + name).append($('camBox'), $('camHelp'));
       showCamHelp('');
       if (name === 'search') { renderSearch(); loadStock(); }
+      if (name === 'stock') { stockCache = null; loadStockTab(); }
       if (name === 'manage' && manageMode) refreshManage();
       window.scrollTo({ top: 0 });
       if (!isTouch) {
-        const f = { scan: 'scan', transfer: 'tScan', search: 'q' }[name];
+        const f = { scan: 'scan', transfer: 'tScan', search: 'q', stock: 'sq' }[name];
         if (f) $(f).focus();
       }
     }
@@ -435,10 +450,11 @@
       say('');
       card.append(
         h('h3', { textContent: it.name + ' (' + it.id + ')' }),
-        h('p', { textContent: 'Stored at: ' + (it.location || 'no location') }));
+        h('p', { textContent: 'Stored at: ' + (it.location || 'no location') + ' | ' + it.type + (it.type === 'Consumable' && it.min ? ' (min ' + it.min + ')' : '') }));
       const q = h('div', { className: 'row' });
       q.append(...qtyEditor(it.id, it.qty, res => lookupItem(it.id, res.msg, true)));
       card.append(q);
+      if (it.type === 'Consumable') card.append(restockRow(it, res => lookupItem(it.id, res.msg, true)));
       const bar = h('div', { className: 'row' });
       bar.append(
         h('button', {
@@ -469,13 +485,21 @@
       }).catch(fail);
     }
 
+    function typeSelect(value) {
+      const s = h('select', { className: 'type' });
+      s.append(h('option', { value: 'Item', textContent: 'Item (stays in the rack)' }),
+               h('option', { value: 'Consumable', textContent: 'Consumable (used up)' }));
+      s.value = value === 'Consumable' ? 'Consumable' : 'Item';
+      return s;
+    }
+
     function itemRow(it, r) {
       const row = h('div', { className: 'row' });
       const saved = res => openLocation(r.id, res.msg, true);
       const draw = () => {
         row.innerHTML = '';
         row.append(
-          h('span', { className: 'nm', textContent: it.name }),
+          h('span', { className: 'nm', textContent: it.name + (it.type === 'Consumable' ? ' (consumable)' : '') }),
           ...qtyEditor(it.id, it.qty, saved),
           h('button', { textContent: 'Edit', onclick: edit }),
           h('button', { textContent: 'Label', onclick: () => { makeItemLabel(it.id, it.name); say('Label added at the bottom of the page.', true); } }),
@@ -486,8 +510,10 @@
         const nm = h('input', { value: it.name, placeholder: 'Item name' });
         const q = h('input', { type: 'number', min: '0', value: String(it.qty), placeholder: 'Quantity' });
         const loc = locInput('Location (type another to move it)', r.name);
-        row.append(nm, q, loc,
-          h('button', { className: 'primary', textContent: 'Save changes', onclick: () => act('editItem', [it.id, nm.value, q.value, loc.value], saved) }),
+        const tp = typeSelect(it.type);
+        const mn = h('input', { type: 'number', min: '0', value: String(it.min || 0), placeholder: 'Minimum stock (alert)' });
+        row.append(nm, q, loc, tp, h('div', { className: 'muted', textContent: 'Minimum stock: alert when a consumable reaches this' }), mn,
+          h('button', { className: 'primary', textContent: 'Save changes', onclick: () => act('editItem', [it.id, nm.value, q.value, loc.value, tp.value, mn.value], saved) }),
           h('button', { textContent: 'Cancel', onclick: draw }));
       };
       draw();
@@ -526,9 +552,11 @@
       card.append(h('h4', { textContent: 'Add an item here' }));
       const nm = h('input', { placeholder: 'Item name' });
       const q = h('input', { type: 'number', min: '0', placeholder: 'Quantity (default 1)' });
-      card.append(nm, q, h('button', {
+      const tp = typeSelect('Item');
+      const mn = h('input', { type: 'number', min: '0', placeholder: 'Minimum stock (consumables only, optional)' });
+      card.append(nm, q, tp, mn, h('button', {
         textContent: 'Add item',
-        onclick: () => act('addItem', [nm.value, q.value, r.id], res => openLocation(r.id, res.msg, true))
+        onclick: () => act('addItem', [nm.value, q.value, r.id, tp.value, mn.value], res => openLocation(r.id, res.msg, true))
       }));
 
       if (r.tools.length) {
@@ -777,6 +805,51 @@
     }
     $('q').addEventListener('input', renderSearch);
 
+    // ----- Stock tab (consumables) -----
+    function restockRow(it, after) {
+      const n = h('input', { type: 'number', min: '1', placeholder: 'Add how many?', className: 'qty', style: 'width:140px' });
+      return h('div', { className: 'row' }, n,
+        h('button', { className: 'primary', textContent: 'Restock (+)', onclick: () => act('restock', [it.id, n.value, 'restock'], after) }));
+    }
+
+    function loadStockTab(doneMsg) {
+      if (!isConfigured()) { say('Set your Google Apps Script /exec URL in config.js first.', false); return; }
+      if (!doneMsg) say('Loading...');
+      callServer('getStock').then(d => {
+        stockCache = { t: Date.now(), data: d };
+        if (doneMsg) say(doneMsg, true); else say('');
+        renderStockTab();
+      }).catch(fail);
+    }
+
+    function renderStockTab() {
+      const out = $('sRes'), low = $('lowBox');
+      out.innerHTML = ''; low.innerHTML = '';
+      if (!stockCache) return;
+      const all = stockCache.data.items.filter(i => i.type === 'Consumable');
+      const lows = all.filter(i => i.min > 0 && i.qty <= i.min);
+      if (lows.length) {
+        low.append(h('h4', { textContent: 'Low stock (' + lows.length + ')' }));
+        lows.forEach(i => low.append(h('div', { className: 'low' },
+          h('strong', { textContent: i.name }), ' - ' + i.qty + ' left (min ' + i.min + ') at ' + (i.location || 'no location'))));
+      }
+      const words = $('sq').value.toLowerCase().split(/\s+/).filter(Boolean);
+      const rows = all.filter(i => words.every(w => (i.name + ' ' + i.location).toLowerCase().includes(w)));
+      out.append(h('h4', { textContent: 'Consumables (' + rows.length + ')' }));
+      if (!all.length) out.append(h('p', { className: 'muted', textContent: 'No consumables yet. Open a location, then Edit an item and set its type to Consumable.' }));
+      rows.forEach(i => {
+        const r = h('div', { className: 'res' });
+        const top = h('div', { className: 'row' },
+          h('div', { className: 'nm' },
+            h('div', { className: 't', textContent: i.name }),
+            h('div', { className: 'muted', textContent: (i.location || 'no location') + ' - Qty ' + i.qty + (i.min ? ' (min ' + i.min + ')' : '') })),
+          h('button', { textContent: 'Open', onclick: () => lookupItem(i.id) }));
+        r.append(top, restockRow(i, res => loadStockTab(res.msg)));
+        out.append(r);
+      });
+    }
+    $('sq').addEventListener('input', renderStockTab);
+
     // ----- Manage Lists -----
     function showManage(mode) { manageMode = mode; refreshManage(); }
 
@@ -838,7 +911,7 @@
       if (!list.length) manage.append(h('p', { className: 'muted', textContent: 'No items yet. Open a location to add items.' }));
       list.forEach(it => {
         manage.append(h('div', { className: 'row' },
-          h('span', { className: 'nm', textContent: it.name + ' (' + it.id + ') - ' + (it.location || 'no location') + ' - Qty ' + it.qty }),
+          h('span', { className: 'nm', textContent: it.name + ' (' + it.id + ') - ' + (it.location || 'no location') + ' - Qty ' + it.qty + (it.type === 'Consumable' ? ' - consumable' : '') }),
           h('button', { textContent: 'Open', onclick: () => lookupItem(it.id) }),
           h('button', { textContent: 'Label', onclick: () => { makeItemLabel(it.id, it.name); say('Label added at the bottom of the page.', true); } })));
       });
