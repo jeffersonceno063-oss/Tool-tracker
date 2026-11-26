@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tool Tracker - View</title>
+  <script src="config.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 520px; margin: 20px auto; padding: 0 14px; color: #111; }
+    .card { border: 1px solid #ccc; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+    h2, h3, h4 { margin: 6px 0 10px; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+    .ok { background: #e6f4ea; color: #137333; }
+    .out { background: #fce8e6; color: #c5221f; }
+    ul { padding-left: 20px; margin: 8px 0; }
+    li { margin-bottom: 6px; }
+    .muted { color: #666; font-size: 14px; }
+    a.btn { display: inline-block; text-decoration: none; background: #1a73e8; color: #fff; padding: 12px 16px; border-radius: 8px; font-weight: 500; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h2>Tool Tracker</h2>
+  <div id="content" class="card">Loading...</div>
+
+  <script>
+    const GAS_URL = ((window.APP_CONFIG && window.APP_CONFIG.GAS_URL) || '').trim();
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('id');
+    const loc = params.get('loc');
+    const box = document.getElementById('content');
+
+    function h(tag, props, ...kids) {
+      const el = document.createElement(tag);
+      Object.assign(el, props || {});
+      kids.forEach(k => el.append(k));
+      return el;
+    }
+
+    async function callServer(fn, ...args) {
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ fn, args })
+      });
+      const data = await res.json();
+      if (!data.ok && data.rpcError) throw new Error(data.rpcError);
+      return data.result;
+    }
+
+    async function init() {
+      if (!GAS_URL || GAS_URL.includes('PASTE_YOUR')) {
+        box.textContent = 'Backend URL not configured in config.js.';
+        return;
+      }
+      try {
+        if (loc) {
+          const r = await callServer('getLocation', loc);
+          box.innerHTML = '';
+          if (!r.found) { box.textContent = 'Location not found.'; return; }
+
+          box.append(
+            h('h3', { textContent: r.name + ' (' + r.id + ')' }),
+            h('h4', { textContent: 'Items (' + r.items.length + ')' })
+          );
+          if (!r.items.length) {
+            box.append(h('p', { className: 'muted', textContent: 'No items stored here.' }));
+          } else {
+            const ul = h('ul');
+            r.items.forEach(it => ul.append(h('li', { textContent: it.name + ' — Qty: ' + it.qty })));
+            box.append(ul);
+          }
+
+          box.append(h('h4', { textContent: 'Tools (' + r.tools.length + ')' }));
+          if (!r.tools.length) {
+            box.append(h('p', { className: 'muted', textContent: 'No tools stored here.' }));
+          } else {
+            const ul = h('ul');
+            r.tools.forEach(t => {
+              const st = t.status === 'Borrowed' ? 'Borrowed by ' + t.borrower : 'Available';
+              ul.append(h('li', { textContent: t.name + ' (' + t.id + ') — ' + st }));
+            });
+            box.append(ul);
+          }
+          box.append(h('a', { className: 'btn', href: 'index.html?loc=' + encodeURIComponent(r.id), textContent: 'Open in Manager to Edit' }));
+        } else if (id) {
+          const t = await callServer('getTool', id);
+          box.innerHTML = '';
+          if (!t.found) { box.textContent = 'Tool not found.'; return; }
+
+          const isOut = t.status === 'Borrowed';
+          box.append(
+            h('h3', { textContent: t.name + ' (' + t.id + ')' }),
+            h('span', { className: 'badge ' + (isOut ? 'out' : 'ok'), textContent: isOut ? 'Borrowed by ' + t.borrower : 'Available' }),
+            h('p', { textContent: 'Stored Location: ' + (t.location || 'Not assigned yet') }),
+            h('a', { className: 'btn', href: 'index.html?id=' + encodeURIComponent(t.id), textContent: isOut ? 'Return / Manage Tool' : 'Borrow / Manage Tool' })
+          );
+        } else {
+          window.location.replace('index.html');
+        }
+      } catch (err) {
+        box.textContent = 'Error loading data: ' + (err.message || err);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
