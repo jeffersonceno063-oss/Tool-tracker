@@ -3,37 +3,48 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tool Tracker - View</title>
+  <title>Tool Tracker</title>
   <script src="config.js"></script>
   <style>
     * { box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, sans-serif; max-width: 520px; margin: 20px auto; padding: 0 14px; color: #111; }
-    .card { border: 1px solid #ccc; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
-    h2, h3, h4 { margin: 6px 0 10px; }
-    .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 520px; margin: 16px auto; padding: 0 14px 40px; color: #111; font-size: 18px; }
+    h1 { font-size: 20px; margin: 4px 0 14px; color: #555; }
+    h2 { font-size: 26px; margin: 4px 0 6px; word-break: break-word; }
+    h3 { font-size: 20px; margin: 18px 0 8px; }
+    .card { border: 1px solid #ccc; border-radius: 12px; padding: 16px; }
+    .muted { color: #666; font-size: 16px; }
+    .badge { display: inline-block; padding: 6px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; margin: 6px 0 10px; }
     .ok { background: #e6f4ea; color: #137333; }
     .out { background: #fce8e6; color: #c5221f; }
-    ul { padding-left: 20px; margin: 8px 0; }
-    li { margin-bottom: 6px; }
-    .muted { color: #666; font-size: 14px; }
-    input.search { width: 100%; padding: 12px; font-size: 16px; border-radius: 6px; border: 1px solid #bbb; margin-bottom: 10px; }
-    .res { border-bottom: 1px solid #eee; padding: 8px 0; }
-    .res .t { font-weight: 600; word-break: break-word; }
+    .low { background: #fff3cd; color: #8a5a00; }
+    button, input { font-size: 20px; border-radius: 10px; border: 1px solid #bbb; }
+    input { width: 100%; padding: 14px; margin: 8px 0; }
+    button { width: 100%; min-height: 60px; padding: 12px; margin: 8px 0; background: #f4f4f6; font-weight: 600; cursor: pointer; touch-action: manipulation; }
+    button:active { background: #e2e2e6; }
+    button.main { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+    button.main:active { background: #1558b0; }
+    button.small { min-height: 48px; font-size: 17px; font-weight: 500; }
+    .item { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid #eee; }
+    .item .nm { flex: 1; word-break: break-word; }
+    .item button { width: auto; min-width: 100px; min-height: 48px; margin: 0; font-size: 17px; }
+    .stepper { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+    .stepper button { width: 64px; margin: 0; font-size: 28px; }
+    .stepper input { text-align: center; margin: 0; font-size: 26px; }
+    .done { text-align: center; padding: 24px 8px; }
+    .done .tick { font-size: 64px; color: #137333; line-height: 1; }
+    .done .big { font-size: 24px; font-weight: 700; margin: 10px 0; }
+    .err { color: #b00020; font-weight: 600; margin: 8px 0; }
     a.loc { color: #1a73e8; }
-    a.btn { display: inline-block; text-decoration: none; background: #1a73e8; color: #fff; padding: 12px 16px; border-radius: 8px; font-weight: 500; margin-top: 10px; }
+    a.btn { display: block; text-align: center; text-decoration: none; background: #f4f4f6; color: #111; border: 1px solid #bbb; padding: 16px; border-radius: 10px; font-weight: 600; margin: 8px 0; }
   </style>
 </head>
 <body>
-  <h2>Tool Tracker</h2>
-  <div id="content" class="card">Loading...</div>
+  <h1>Tool Tracker</h1>
+  <div id="content" class="card">Sandali lang...</div>
 
   <script>
     const GAS_URL = ((window.APP_CONFIG && window.APP_CONFIG.GAS_URL) || '').trim();
     const params = new URLSearchParams(window.location.search);
-    const id = params.get('id');
-    const loc = params.get('loc');
-    const itemId = params.get('item');
-    const searchMode = params.has('search');
     const box = document.getElementById('content');
 
     function h(tag, props, ...kids) {
@@ -55,40 +66,216 @@
       return data.result;
     }
 
-    // Location name as a link to its read-only page (plain text if it has no location)
+    // Remember the person's name on this phone only.
+    const store = {
+      get(k) { try { return localStorage.getItem(k) || ''; } catch (_) { return ''; } },
+      set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} }
+    };
+
+    function button(text, cls, onclick) {
+      return h('button', { className: cls || '', textContent: text, onclick: onclick });
+    }
+
+    function errorLine(text) {
+      const old = box.querySelector('.err');
+      if (old) old.remove();
+      box.append(h('div', { className: 'err', textContent: text }));
+    }
+
+    // Wraps a server call: shows an error if it fails, calls onOk(result) if it works.
+    async function run(btn, fn, args, onOk) {
+      const label = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Sandali lang...';
+      try {
+        const r = await callServer(fn, ...args);
+        if (!r.ok) { btn.disabled = false; btn.textContent = label; errorLine(r.msg); return; }
+        onOk(r);
+      } catch (e) {
+        btn.disabled = false; btn.textContent = label;
+        errorLine('May problema: ' + (e.message || e));
+      }
+    }
+
+    // Green "done" screen. undo = { label, fn } runs once, then back() reloads the page content.
+    function doneScreen(title, detail, undo, back) {
+      box.innerHTML = '';
+      const d = h('div', { className: 'done' },
+        h('div', { className: 'tick', textContent: '✔' }),
+        h('div', { className: 'big', textContent: title }),
+        h('div', { className: 'muted', textContent: detail || '' }));
+      box.append(d);
+      if (undo) {
+        box.append(button('Mali? I-undo', '', async function () {
+          this.disabled = true;
+          try {
+            const r = await undo();
+            if (!r.ok) { errorLine(r.msg); return; }
+            back('Na-undo na.');
+          } catch (e) { errorLine('May problema: ' + (e.message || e)); }
+        }));
+      }
+    }
+
+    function note(text) {
+      if (text) box.prepend(h('div', { className: 'badge ok', textContent: text }));
+    }
+
     function locLink(name, locId) {
-      if (!name) return 'Not assigned yet';
+      if (!name) return 'Wala pang lokasyon';
       if (!locId) return name;
       return h('a', { className: 'loc', href: 'view.html?loc=' + encodeURIComponent(locId), textContent: name });
     }
 
+    // ----- Tool: Hiram / Isauli -----
+    async function showTool(id, msg) {
+      const t = await callServer('getTool', id);
+      box.innerHTML = '';
+      if (!t.found) { box.textContent = 'Hindi nahanap ang tool na ito.'; return; }
+      box.append(h('h2', { textContent: t.name }), h('div', { className: 'muted', textContent: t.id }));
+
+      if (!t.location) {
+        box.append(h('p', { textContent: 'Wala pang lokasyon ang tool na ito. Sabihin sa admin.' }));
+        note(msg);
+        return;
+      }
+
+      if (t.status !== 'Borrowed') {
+        box.append(h('span', { className: 'badge ok', textContent: 'Available' }),
+          h('p', {}, 'Nasa: ', locLink(t.location, t.locationId)));
+        const nameIn = h('input', { placeholder: 'Pangalan mo', value: store.get('tt_name'), autocomplete: 'name' });
+        box.append(h('div', { className: 'muted', textContent: 'Sino ang hihiram?' }), nameIn);
+        const go = button('Hiramin', 'main', function () {
+          const who = nameIn.value.trim();
+          if (!who) { errorLine('Ilagay muna ang pangalan mo.'); return; }
+          run(this, 'borrowTool', [t.id, who], () => {
+            store.set('tt_name', who);
+            doneScreen('Hiniram mo na ang ' + t.name, 'Ibalik sa ' + t.location + ' pagkatapos gamitin.',
+              () => callServer('undoBorrow', t.id), m => showTool(id, m));
+          });
+        });
+        box.append(go);
+      } else {
+        box.append(h('span', { className: 'badge out', textContent: 'Hawak ni ' + t.borrower }));
+        const giveBack = (loc, locName) => function () {
+          run(this, 'returnTool', [t.id, loc], () => {
+            doneScreen('Naibalik na ang ' + t.name, 'Nasa ' + locName + ' na ito.',
+              () => callServer('undoReturn', t.id, t.borrower, t.location), m => showTool(id, m));
+          });
+        };
+        box.append(button('Isauli sa ' + t.location, 'main', giveBack(t.locationId || t.location, t.location)));
+        const other = button('Ibang rack...', 'small', async function () {
+          this.disabled = true;
+          try {
+            const list = await callServer('listLocations');
+            this.remove();
+            box.append(h('h3', { textContent: 'Saan mo ilalagay?' }));
+            list.forEach(l => box.append(button(l.name, 'small', giveBack(l.id, l.name))));
+          } catch (e) { errorLine('May problema: ' + (e.message || e)); this.disabled = false; }
+        });
+        box.append(other);
+      }
+      note(msg);
+    }
+
+    // ----- Consumable: Kumuha -----
+    function takePanel(it, back) {
+      box.innerHTML = '';
+      box.append(h('h2', { textContent: it.name }), h('div', { className: 'muted', textContent: 'Natitira: ' + it.qty }));
+      let n = 1;
+      const qty = h('input', { type: 'number', min: '1', max: String(it.qty), value: '1', inputMode: 'numeric' });
+      qty.addEventListener('input', () => { n = parseInt(qty.value, 10) || 0; });
+      const bump = d => { n = Math.min(it.qty, Math.max(1, (parseInt(qty.value, 10) || 0) + d)); qty.value = String(n); };
+      box.append(h('h3', { textContent: 'Ilan ang kukunin?' }),
+        h('div', { className: 'stepper' }, button('-', '', () => bump(-1)), qty, button('+', '', () => bump(1))));
+      const who = h('input', { placeholder: 'Pangalan mo (hindi kailangan)', value: store.get('tt_name'), autocomplete: 'name' });
+      box.append(who);
+      box.append(button('Kunin', 'main', function () {
+        const q = parseInt(qty.value, 10);
+        if (!(q >= 1) || q > it.qty) { errorLine('Ang dami ay 1 hanggang ' + it.qty + '.'); return; }
+        run(this, 'takeConsumable', [it.id, q, who.value.trim()], r => {
+          if (who.value.trim()) store.set('tt_name', who.value.trim());
+          doneScreen('Kinuha mo ang ' + q + ' ' + it.name, 'Natitira: ' + r.qty + (r.low ? ' (paubos na)' : ''),
+            () => callServer('undoTake', it.id, q), m => back(m));
+        });
+      }));
+      box.append(button('Bumalik', 'small', () => back()));
+    }
+
+    function itemBadge(it) {
+      if (it.type === 'Consumable' && it.min > 0 && it.qty <= it.min) return h('span', { className: 'badge low', textContent: 'Paubos na' });
+      return '';
+    }
+
+    // ----- Location (rack / bodega) -----
+    async function showLocation(raw, msg) {
+      const r = await callServer('getLocation', raw);
+      box.innerHTML = '';
+      if (!r.found) { box.textContent = 'Hindi nahanap ang lokasyon.'; return; }
+      box.append(h('h2', { textContent: r.name }), h('div', { className: 'muted', textContent: r.id }));
+
+      box.append(h('h3', { textContent: 'Mga gamit (' + r.items.length + ')' }));
+      if (!r.items.length) box.append(h('p', { className: 'muted', textContent: 'Walang nakalagay dito.' }));
+      r.items.forEach(it => {
+        const row = h('div', { className: 'item' },
+          h('div', { className: 'nm' }, it.name, h('div', { className: 'muted', textContent: 'Dami: ' + it.qty }), itemBadge(it)));
+        if (it.type === 'Consumable') {
+          row.append(button('Kumuha', 'main', () => takePanel(it, m => showLocation(raw, m))));
+        }
+        box.append(row);
+      });
+
+      if (r.tools.length) {
+        box.append(h('h3', { textContent: 'Mga tool (' + r.tools.length + ')' }));
+        r.tools.forEach(t => {
+          const st = t.status === 'Borrowed' ? 'Hawak ni ' + t.borrower : 'Available';
+          box.append(h('div', { className: 'item' },
+            h('div', { className: 'nm' }, t.name, h('div', { className: 'muted', textContent: st })),
+            h('a', { className: 'btn', style: 'width:auto;margin:0;padding:12px 16px', href: 'view.html?id=' + encodeURIComponent(t.id), textContent: 'Buksan' })));
+        });
+      }
+      note(msg);
+    }
+
+    // ----- Single item QR -----
+    async function showItem(id, msg) {
+      const it = await callServer('getItem', id);
+      box.innerHTML = '';
+      if (!it.found) { box.textContent = 'Hindi nahanap ang item na ito.'; return; }
+      box.append(h('h2', { textContent: it.name }), h('div', { className: 'muted', textContent: it.id }),
+        h('p', { textContent: 'Dami: ' + it.qty }), itemBadge(it),
+        h('p', {}, 'Nasa: ', locLink(it.location, it.locationId)));
+      if (it.type === 'Consumable') box.append(button('Kumuha', 'main', () => takePanel(it, m => showItem(id, m))));
+      note(msg);
+    }
+
+    // ----- Search -----
     async function initSearch() {
       const d = await callServer('getStock');
       box.innerHTML = '';
-      box.append(h('h3', { textContent: 'Where is it?' }));
-      const q = h('input', { className: 'search', placeholder: 'Type an item or tool name...', autocomplete: 'off' });
+      box.append(h('h2', { textContent: 'Hanapin ang gamit' }));
+      const q = h('input', { placeholder: 'I-type ang pangalan...', autocomplete: 'off' });
       const out = h('div');
       box.append(q, out);
       const render = () => {
         out.innerHTML = '';
         const words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
         if (!words.length) {
-          out.append(h('p', { className: 'muted', textContent: d.items.length + ' items and ' + d.tools.length + ' tools. Start typing to find where something is.' }));
+          out.append(h('p', { className: 'muted', textContent: d.items.length + ' items at ' + d.tools.length + ' tools. Mag-type para hanapin kung nasaan.' }));
           return;
         }
         const hit = s => words.every(w => s.includes(w));
         const rows = [];
         d.items.forEach(x => { if (hit((x.name + ' ' + x.location + ' ' + x.id).toLowerCase())) rows.push({ t: 'item', x: x }); });
         d.tools.forEach(x => { if (hit((x.name + ' ' + x.location + ' ' + x.id).toLowerCase())) rows.push({ t: 'tool', x: x }); });
-        if (!rows.length) { out.append(h('p', { className: 'muted', textContent: 'No match.' })); return; }
+        if (!rows.length) { out.append(h('p', { className: 'muted', textContent: 'Walang nahanap.' })); return; }
         rows.slice(0, 50).forEach(r => {
           const x = r.x;
-          const tail = r.t === 'item' ? ' - Qty ' + x.qty : ' - ' + (x.status === 'Borrowed' ? 'borrowed by ' + x.borrower : 'available');
-          out.append(h('div', { className: 'res' },
-            h('div', { className: 't', textContent: x.name }),
-            h('div', { className: 'muted' }, locLink(x.location, x.locationId), tail)));
+          const tail = r.t === 'item' ? ' - Dami: ' + x.qty : ' - ' + (x.status === 'Borrowed' ? 'hawak ni ' + x.borrower : 'available');
+          out.append(h('div', { className: 'item' },
+            h('div', { className: 'nm' }, h('strong', { textContent: x.name }),
+              h('div', { className: 'muted' }, locLink(x.location, x.locationId), tail))));
         });
-        if (rows.length > 50) out.append(h('p', { className: 'muted', textContent: 'Showing 50 of ' + rows.length + '. Type more to narrow down.' }));
+        if (rows.length > 50) out.append(h('p', { className: 'muted', textContent: 'Unang 50 lang ang pinapakita. Dagdagan ang tinype.' }));
       };
       q.addEventListener('input', render);
       render();
@@ -96,65 +283,17 @@
 
     async function init() {
       if (!GAS_URL || GAS_URL.includes('PASTE_YOUR')) {
-        box.textContent = 'Backend URL not configured in config.js.';
+        box.textContent = 'Hindi pa naka-set ang backend URL sa config.js.';
         return;
       }
       try {
-        if (loc) {
-          const r = await callServer('getLocation', loc);
-          box.innerHTML = '';
-          if (!r.found) { box.textContent = 'Location not found.'; return; }
-
-          box.append(
-            h('h3', { textContent: r.name + ' (' + r.id + ')' }),
-            h('h4', { textContent: 'Items (' + r.items.length + ')' })
-          );
-          if (!r.items.length) {
-            box.append(h('p', { className: 'muted', textContent: 'No items stored here.' }));
-          } else {
-            const ul = h('ul');
-            r.items.forEach(it => ul.append(h('li', { textContent: it.name + ' — Qty: ' + it.qty })));
-            box.append(ul);
-          }
-
-          box.append(h('h4', { textContent: 'Tools (' + r.tools.length + ')' }));
-          if (!r.tools.length) {
-            box.append(h('p', { className: 'muted', textContent: 'No tools stored here.' }));
-          } else {
-            const ul = h('ul');
-            r.tools.forEach(t => {
-              const st = t.status === 'Borrowed' ? 'Borrowed by ' + t.borrower : 'Available';
-              ul.append(h('li', { textContent: t.name + ' (' + t.id + ') — ' + st }));
-            });
-            box.append(ul);
-          }
-        } else if (itemId) {
-          const it = await callServer('getItem', itemId);
-          box.innerHTML = '';
-          if (!it.found) { box.textContent = 'Item not found.'; return; }
-          box.append(
-            h('h3', { textContent: it.name + ' (' + it.id + ')' }),
-            h('p', { textContent: 'Quantity: ' + it.qty }),
-            h('p', {}, 'Stored at: ', locLink(it.location, it.locationId))
-          );
-        } else if (searchMode) {
-          await initSearch();
-        } else if (id) {
-          const t = await callServer('getTool', id);
-          box.innerHTML = '';
-          if (!t.found) { box.textContent = 'Tool not found.'; return; }
-
-          const isOut = t.status === 'Borrowed';
-          box.append(
-            h('h3', { textContent: t.name + ' (' + t.id + ')' }),
-            h('span', { className: 'badge ' + (isOut ? 'out' : 'ok'), textContent: isOut ? 'Borrowed by ' + t.borrower : 'Available' }),
-            h('p', {}, 'Stored Location: ', locLink(t.location, t.locationId))
-          );
-        } else {
-          window.location.replace('index.html');
-        }
+        if (params.get('loc')) await showLocation(params.get('loc'));
+        else if (params.get('item')) await showItem(params.get('item'));
+        else if (params.has('search')) await initSearch();
+        else if (params.get('id')) await showTool(params.get('id'));
+        else box.textContent = 'Mag-scan ng QR code ng tool, rack o item.';
       } catch (err) {
-        box.textContent = 'Error loading data: ' + (err.message || err);
+        box.textContent = 'May problema sa pag-load: ' + (err.message || err);
       }
     }
 
