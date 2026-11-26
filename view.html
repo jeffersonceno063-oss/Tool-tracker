@@ -83,7 +83,6 @@
             });
             box.append(ul);
           }
-          box.append(h('a', { className: 'btn', href: 'index.html?loc=' + encodeURIComponent(r.id), textContent: 'Open in Manager to Edit' }));
         } else if (id) {
           const t = await callServer('getTool', id);
           box.innerHTML = '';
@@ -93,8 +92,7 @@
           box.append(
             h('h3', { textContent: t.name + ' (' + t.id + ')' }),
             h('span', { className: 'badge ' + (isOut ? 'out' : 'ok'), textContent: isOut ? 'Borrowed by ' + t.borrower : 'Available' }),
-            h('p', { textContent: 'Stored Location: ' + (t.location || 'Not assigned yet') }),
-            h('a', { className: 'btn', href: 'index.html?id=' + encodeURIComponent(t.id), textContent: isOut ? 'Return / Manage Tool' : 'Borrow / Manage Tool' })
+            h('p', { textContent: 'Stored Location: ' + (t.location || 'Not assigned yet') })
           );
         } else {
           window.location.replace('index.html');
