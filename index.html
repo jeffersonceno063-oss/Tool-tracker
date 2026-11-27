@@ -55,6 +55,12 @@
     .label .title { font-size: var(--tt); font-weight: 700; line-height: 1.15; margin-top: 1.5mm; word-break: break-word; }
     .label .code { font-size: var(--hh); color: #333; margin-top: .5mm; }
     .label .hint { font-size: var(--hh); color: #333; margin-top: 1mm; }
+    .label .xbtn { width: 100%; margin: 2mm 0 0; padding: 6px 8px; font-size: 13px; background: #fdecea; border-color: #f5c2c0; color: #8c1d18; }
+    .chip.active { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+    .pk { display: flex; align-items: center; gap: 12px; padding: 10px 6px; border-bottom: 1px solid #eee; cursor: pointer; }
+    .pk.on { background: #e8f0fe; }
+    .pk input[type=checkbox] { width: 26px; height: 26px; margin: 0; flex: none; }
+    #pkList { max-height: 360px; overflow-y: auto; margin-bottom: 8px; border: 1px solid #eee; border-radius: 8px; }
     .size-pick { width: auto; margin: 0 6px 6px 0; padding: 12px; }
     @page { size: A4; margin: 8mm; }
     @media print { .no-print { display: none !important; } body { margin: 0; max-width: none; padding: 0; } #labels { display: flex !important; margin: 0; } }
@@ -79,6 +85,8 @@
       <button class="tab" data-tab="stock">Stock</button>
       <button class="tab" data-tab="manage">Manage</button>
     </div>
+
+    <div id="repBanner" style="display:none"></div>
 
     <!-- ===== SCAN TAB ===== -->
     <div id="tab-scan">
@@ -174,22 +182,35 @@
         <button onclick="showManage('locations')">Locations</button>
         <button onclick="showManage('tools')">Tools</button>
         <button onclick="showManage('items')">Items</button>
+        <button onclick="showManage('reports')">Reports</button>
         <div id="manage"></div>
       </section>
 
       <section>
         <h3>Labels</h3>
-        <button onclick="loadAllLocs()">All location labels</button>
-        <button onclick="loadAll()">All tool labels</button>
-        <button onclick="loadAllItems()">All item labels</button>
-        <button onclick="loadSearchLabel()">Search QR label</button>
-        <select id="labelSize" class="size-pick" onchange="setLabelSize()">
-          <option value="s">Small (3.8 cm)</option>
-          <option value="m" selected>Medium (5.5 cm)</option>
-          <option value="l">Large (8.5 cm)</option>
-        </select>
-        <button class="primary" onclick="window.print()">Print labels</button>
-        <button onclick="clearLabels()">Clear labels</button>
+        <p class="muted">Tick the labels you want, then press Print. Only the ticked ones are printed.</p>
+        <div class="row" id="pkChips">
+          <button class="chip" data-k="all">All</button>
+          <button class="chip" data-k="rack">Racks</button>
+          <button class="chip" data-k="tool">Tools</button>
+          <button class="chip" data-k="item">Items</button>
+        </div>
+        <input id="pkq" placeholder="Search the list..." autocomplete="off">
+        <div id="pkList"><p class="muted">Loading...</p></div>
+        <div class="row">
+          <button onclick="pickAllShown()">Tick all shown</button>
+          <button onclick="pickClear()">Untick all</button>
+        </div>
+        <div class="row">
+          <select id="labelSize" class="size-pick" onchange="setLabelSize()">
+            <option value="s">Small (3.8 cm)</option>
+            <option value="m" selected>Medium (5.5 cm)</option>
+            <option value="l">Large (8.5 cm)</option>
+          </select>
+          <button id="pkShow" onclick="pickShow()">Show labels</button>
+          <button id="pkPrint" class="primary" onclick="pickPrint()">Print</button>
+        </div>
+        <button onclick="clearLabels()">Clear labels below</button>
         <p id="mmsg" class="msg"></p>
       </section>
     </div>
@@ -259,7 +280,7 @@
       showCamHelp('');
       if (name === 'search') { renderSearch(); loadStock(); }
       if (name === 'stock') { stockCache = null; loadStockTab(); }
-      if (name === 'manage' && manageMode) refreshManage();
+      if (name === 'manage') { loadPicker(); if (manageMode) refreshManage(); }
       window.scrollTo({ top: 0 });
       if (!isTouch) {
         const f = { scan: 'scan', transfer: 'tScan', search: 'q', stock: 'sq' }[name];
@@ -987,6 +1008,8 @@
         callServer('listTools').then(renderManageTools).catch(fail);
       } else if (manageMode === 'items') {
         callServer('getStock').then(d => renderManageItems(d.items)).catch(fail);
+      } else if (manageMode === 'reports') {
+        callServer('listReports').then(list => { renderManageReports(list); showReportBanner(list); }).catch(fail);
       }
     }
 
@@ -1043,20 +1066,60 @@
       });
     }
 
+    // ----- Problem reports from staff -----
+    function showReportBanner(list) {
+      const n = list.filter(r => r.status !== 'Done').length;
+      const box = $('repBanner');
+      box.innerHTML = '';
+      if (!n) { box.style.display = 'none'; return; }
+      box.style.display = 'block';
+      box.append(h('button', {
+        className: 'warn', style: 'width:100%;text-align:left;cursor:pointer;margin:0 0 12px',
+        textContent: n + ' bagong report mula sa staff. Pindutin para basahin.',
+        onclick: () => { showTab('manage'); showManage('reports'); }
+      }));
+    }
+
+    function loadReportBanner() {
+      if (!isConfigured()) return;
+      callServer('listReports').then(showReportBanner).catch(() => {});
+    }
+
+    function renderManageReports(list) {
+      manage.innerHTML = '';
+      const open = list.filter(r => r.status !== 'Done');
+      manage.append(h('h4', { textContent: 'Reports (' + open.length + ' new, ' + (list.length - open.length) + ' done)' }));
+      if (!list.length) manage.append(h('p', { className: 'muted', textContent: 'No reports yet.' }));
+      open.concat(list.filter(r => r.status === 'Done')).forEach(r => {
+        const when = r.time ? new Date(r.time).toLocaleString() : '';
+        const box = h('div', { className: 'res' },
+          h('div', { className: 't', textContent: r.id + (r.who ? ' - ' + r.who : '') + (r.status === 'Done' ? ' (done)' : '') }),
+          h('div', { className: 'muted', textContent: when + (r.about ? ' - ' + r.about : '') }),
+          h('p', { textContent: r.message }));
+        if (r.status !== 'Done') box.append(h('button', { textContent: 'Mark done', onclick: () => act('resolveReport', [r.id], () => refreshManage()) }));
+        manage.append(box);
+      });
+    }
+
     // ----- Printable QR Labels -----
     function makeQr(parent, link) {
       // Drawn large (256px) and scaled down by CSS, so it stays sharp when printed.
       new QRCode(parent, { text: link, width: 256, height: 256, correctLevel: QRCode.CorrectLevel.M });
     }
 
-    function makeLinkLabel(link, kind, title, sub, hint) {
+    function makeLinkLabel(link, kind, title, sub, hint, key) {
       const d = h('div', { className: 'label' });
       const q = h('div', { className: 'qr' });
       makeQr(q, link);
       d.append(h('div', { className: 'tag', textContent: kind }), q,
         h('div', { className: 'title', textContent: title }),
         h('div', { className: 'code', textContent: sub }),
-        h('div', { className: 'hint', textContent: hint }));
+        h('div', { className: 'hint', textContent: hint }),
+        // Not printed (see .no-print): lets you drop a label you do not want on the sheet.
+        h('button', { className: 'xbtn no-print', textContent: '\u2715 Remove this label', onclick: () => {
+          d.remove();
+          if (key) { PK.sel.delete(key); if (PK.loaded) renderPicker(); }   // keep the tick list in step
+        } }));
       $('labels').appendChild(d);
     }
 
@@ -1067,15 +1130,15 @@
     }
 
     function makeLabel(id, name) {
-      makeLinkLabel(SITE_BASE_URL + 'view.html?id=' + encodeURIComponent(id), 'TOOL', name, id, 'I-scan para hiramin o isauli');
+      makeLinkLabel(SITE_BASE_URL + 'view.html?id=' + encodeURIComponent(id), 'TOOL', name, id, 'I-scan para hiramin o isauli', id);
     }
     function makeLocLabel(id, name) {
-      makeLinkLabel(SITE_BASE_URL + 'view.html?loc=' + encodeURIComponent(id), 'RACK', name, id, 'I-scan para makita ang laman');
+      makeLinkLabel(SITE_BASE_URL + 'view.html?loc=' + encodeURIComponent(id), 'RACK', name, id, 'I-scan para makita ang laman', id);
     }
     function makeItemLabel(id, name, type) {
       const c = type === 'Consumable';
       makeLinkLabel(SITE_BASE_URL + 'view.html?item=' + encodeURIComponent(id), c ? 'CONSUMABLE' : 'ITEM', name, id,
-        c ? 'I-scan para kumuha' : 'I-scan para sa detalye');
+        c ? 'I-scan para kumuha' : 'I-scan para sa detalye', id);
     }
 
     function addToolUi() {
@@ -1086,6 +1149,7 @@
         $('newName').value = '';
         stockCache = null;
         say('Added: ' + r.id + ' - ' + r.name + '. Label is at the bottom of the page.', true);
+        loadPicker();
         if (manageMode === 'tools') refreshManage();
       }).catch(fail);
     }
@@ -1098,41 +1162,88 @@
         $('newLoc').value = '';
         say((r.existed ? 'Already exists: ' : 'Added: ') + r.name + '. Label is at the bottom of the page.', true);
         loadLocs();
+        loadPicker();
         if (manageMode === 'locations') refreshManage();
       }).catch(fail);
     }
 
-    function loadAll() {
-      clearLabels();
-      say('Loading tool labels...');
-      callServer('listTools').then(list => {
-        list.forEach(t => makeLabel(t.id, t.name));
-        say('Loaded ' + list.length + ' tool label(s).', true);
-      }).catch(fail);
+    // ----- Label picker: tick what to print -----
+    const PK = { rows: [], sel: new Set(), kind: 'all', loaded: false };
+
+    function loadPicker() {
+      if (!isConfigured()) { $('pkList').textContent = 'Set your Google Apps Script /exec URL in config.js first.'; return; }
+      Promise.all([callServer('listLocations'), callServer('getStock')]).then(([locs, stock]) => {
+        const rows = [{ key: 'SEARCH', kind: 'search', name: 'Search QR (hanapin ang gamit)', sub: 'one QR for the whole place' }];
+        locs.forEach(l => rows.push({ key: l.id, kind: 'rack', name: l.name, sub: l.id }));
+        stock.tools.forEach(t => rows.push({ key: t.id, kind: 'tool', name: t.name, sub: t.id + (t.location ? ' - ' + t.location : '') }));
+        stock.items.forEach(i => rows.push({ key: i.id, kind: 'item', type: i.type, name: i.name,
+          sub: i.id + ' - ' + (i.location || 'no location') + (i.type === 'Consumable' ? ' - consumable' : '') }));
+        PK.rows = rows; PK.loaded = true;
+        renderPicker();
+      }).catch(err => { $('pkList').textContent = 'Could not load the list: ' + (err && err.message ? err.message : err); });
     }
 
-    function loadAllLocs() {
-      clearLabels();
-      say('Loading location labels...');
-      callServer('listLocations').then(list => {
-        list.forEach(l => makeLocLabel(l.id, l.name));
-        say('Loaded ' + list.length + ' location label(s).', true);
-      }).catch(fail);
+    function pickShown() {
+      const words = $('pkq').value.toLowerCase().split(/\s+/).filter(Boolean);
+      return PK.rows.filter(r => {
+        if (PK.kind !== 'all' && r.kind !== PK.kind && !(PK.kind === 'rack' && r.kind === 'search')) return false;
+        const hay = (r.name + ' ' + r.sub).toLowerCase();
+        return words.every(w => hay.includes(w));
+      });
     }
 
-    function loadAllItems() {
-      clearLabels();
-      say('Loading item labels...');
-      callServer('getStock').then(d => {
-        d.items.forEach(it => makeItemLabel(it.id, it.name, it.type));
-        say('Loaded ' + d.items.length + ' item label(s).', true);
-      }).catch(fail);
+    function updatePickCount() {
+      const n = PK.sel.size;
+      $('pkShow').textContent = 'Show labels (' + n + ')';
+      $('pkPrint').textContent = 'Print (' + n + ')';
+      $('pkShow').disabled = $('pkPrint').disabled = n === 0;
     }
 
-    function loadSearchLabel() {
-      makeLinkLabel(SITE_BASE_URL + 'view.html?search=1', 'HANAPIN', 'Search', 'Hanapin ang gamit', 'I-scan para hanapin kung nasaan ang gamit');
-      say('Search label added at the bottom of the page.', true);
+    function renderPicker() {
+      document.querySelectorAll('#pkChips .chip').forEach(b => b.classList.toggle('active', b.dataset.k === PK.kind));
+      const box = $('pkList');
+      box.innerHTML = '';
+      const rows = pickShown();
+      if (!rows.length) box.append(h('p', { className: 'muted', textContent: 'Nothing to show.' }));
+      rows.forEach(r => {
+        const cb = h('input', { type: 'checkbox', checked: PK.sel.has(r.key) });
+        const row = h('label', { className: 'pk' + (cb.checked ? ' on' : '') },
+          cb, h('div', { className: 'nm' }, h('div', { className: 't', textContent: r.name }), h('div', { className: 'muted', textContent: r.sub })));
+        cb.onchange = () => {
+          if (cb.checked) PK.sel.add(r.key); else PK.sel.delete(r.key);
+          row.classList.toggle('on', cb.checked);
+          updatePickCount();
+        };
+        box.append(row);
+      });
+      updatePickCount();
     }
+
+    function pickAllShown() { pickShown().forEach(r => PK.sel.add(r.key)); renderPicker(); }
+    function pickClear() { PK.sel.clear(); renderPicker(); }
+
+    // Builds labels for the ticked rows only (racks, then tools, then items).
+    function pickShow() {
+      clearLabels();
+      const order = { search: 0, rack: 1, tool: 2, item: 3 };
+      const chosen = PK.rows.filter(r => PK.sel.has(r.key)).sort((a, b) => order[a.kind] - order[b.kind]);
+      chosen.forEach(r => {
+        if (r.kind === 'rack') makeLocLabel(r.key, r.name);
+        else if (r.kind === 'tool') makeLabel(r.key, r.name);
+        else if (r.kind === 'item') makeItemLabel(r.key, r.name, r.type);
+        else makeLinkLabel(SITE_BASE_URL + 'view.html?search=1', 'HANAPIN', 'Search', 'Hanapin ang gamit', 'I-scan para hanapin kung nasaan ang gamit', 'SEARCH');
+      });
+      say(chosen.length + ' label(s) ready below. Press \u2715 on any you do not want.', true);
+      return chosen.length;
+    }
+
+    function pickPrint() {
+      if (!pickShow()) return;
+      setTimeout(() => window.print(), 400);   // let the QR codes finish drawing
+    }
+
+    $('pkq').addEventListener('input', renderPicker);
+    document.querySelectorAll('#pkChips .chip').forEach(b => b.onclick = () => { PK.kind = b.dataset.k; renderPicker(); });
 
     function clearLabels() { $('labels').innerHTML = ''; }
 
@@ -1406,6 +1517,7 @@
     $('camHost-scan').append($('camBox'), $('camHelp'));
     renderTransfer();
     loadLocs();
+    loadReportBanner();
 
     // Auto-open tool, item or location if navigated with ?id=, ?item= or ?loc=
     if (window.location.search) {
