@@ -34,6 +34,9 @@
     .done .tick { font-size: 64px; color: #137333; line-height: 1; }
     .done .big { font-size: 24px; font-weight: 700; margin: 10px 0; }
     .err { color: #b00020; font-weight: 600; margin: 8px 0; }
+    .foot { margin-top: 18px; text-align: center; color: #555; font-size: 16px; }
+    .foot button { width: 100%; }
+    textarea { width: 100%; font-size: 20px; padding: 14px; margin: 8px 0; border-radius: 10px; border: 1px solid #bbb; min-height: 120px; font-family: inherit; }
     a.loc { color: #1a73e8; }
     a.btn { display: block; text-align: center; text-decoration: none; background: #f4f4f6; color: #111; border: 1px solid #bbb; padding: 16px; border-radius: 10px; font-weight: 600; margin: 8px 0; }
   </style>
@@ -41,6 +44,7 @@
 <body>
   <h1>Tool Tracker</h1>
   <div id="content" class="card">Sandali lang...</div>
+  <div id="foot" class="foot"></div>
 
   <script>
     const GAS_URL = ((window.APP_CONFIG && window.APP_CONFIG.GAS_URL) || '').trim();
@@ -66,6 +70,38 @@
       return data.result;
     }
 
+    // Server messages are in English. Staff always see them in Tagalog, in plain words.
+    const MSGS = [
+      [/Enter the borrower/i, 'Ilagay muna ang pangalan mo.'],
+      [/^Tool not found/i, 'Hindi nahanap ang tool na ito.'],
+      [/Set this tool's location first/i, 'Wala pang lokasyon ang tool na ito. Sabihin sa admin.'],
+      [/^Already borrowed by (.+)\.$/i, m => 'Hawak na ni ' + m[1] + ' ang tool na ito. I-refresh ang page.'],
+      [/Enter where the tool was put back/i, 'Piliin kung saan ibabalik ang tool.'],
+      [/not currently borrowed|This tool is not borrowed/i, 'Naisauli na ang tool na ito. I-refresh ang page.'],
+      [/already borrowed/i, 'Hawak na ng iba ang tool na ito. I-refresh ang page.'],
+      [/^Location not found/i, 'Hindi nahanap ang rack.'],
+      [/^Item not found/i, 'Hindi nahanap ang item na ito.'],
+      [/is not a consumable/i, 'Hindi ito puwedeng kunin.'],
+      [/^Quantity must be/i, 'Ang dami ay dapat buong numero, 1 pataas.'],
+      [/^Only 0 /i, 'Ubos na ang stock nito.'],
+      [/^Only (\d+) /i, m => 'Ang natitira na lang ay ' + m[1] + '. Bawasan ang kukunin.'],
+      [/^Cannot undo/i, 'Hindi na ma-undo ito.'],
+      [/^Write the problem/i, 'Isulat muna kung ano ang problema.'],
+      [/lock/i, 'Maraming gumagamit ngayon. Subukan ulit.'],
+      [/Failed to fetch|NetworkError|Load failed|network/i, 'Walang internet o mahina ang signal. Subukan ulit.']
+    ];
+    function tl(msg) {
+      msg = String(msg || '');
+      for (const [re, out] of MSGS) {
+        const m = re.exec(msg);
+        if (m) return typeof out === 'function' ? out(m) : out;
+      }
+      return 'May problema. Subukan ulit, o ipaalam sa admin.';
+    }
+
+    const CONTACT = ((window.APP_CONFIG && window.APP_CONFIG.ADMIN_CONTACT) || '').trim();
+    let about = '';   // what the person was looking at, sent along with a problem report
+
     // Remember the person's name on this phone only.
     const store = {
       get(k) { try { return localStorage.getItem(k) || ''; } catch (_) { return ''; } },
@@ -88,11 +124,11 @@
       btn.disabled = true; btn.textContent = 'Sandali lang...';
       try {
         const r = await callServer(fn, ...args);
-        if (!r.ok) { btn.disabled = false; btn.textContent = label; errorLine(r.msg); return; }
+        if (!r.ok) { btn.disabled = false; btn.textContent = label; errorLine(tl(r.msg)); return; }
         onOk(r);
       } catch (e) {
         btn.disabled = false; btn.textContent = label;
-        errorLine('May problema: ' + (e.message || e));
+        errorLine(tl(e.message || e));
       }
     }
 
@@ -109,9 +145,9 @@
           this.disabled = true;
           try {
             const r = await undo();
-            if (!r.ok) { errorLine(r.msg); return; }
+            if (!r.ok) { errorLine(tl(r.msg)); this.disabled = false; return; }
             back('Na-undo na.');
-          } catch (e) { errorLine('May problema: ' + (e.message || e)); }
+          } catch (e) { errorLine(tl(e.message || e)); this.disabled = false; }
         }));
       }
     }
@@ -131,6 +167,7 @@
       const t = await callServer('getTool', id);
       box.innerHTML = '';
       if (!t.found) { box.textContent = 'Hindi nahanap ang tool na ito.'; return; }
+      about = 'Tool: ' + t.name + ' (' + t.id + ')';
       box.append(h('h2', { textContent: t.name }), h('div', { className: 'muted', textContent: t.id }));
 
       if (!t.location) {
@@ -170,7 +207,7 @@
             this.remove();
             box.append(h('h3', { textContent: 'Saan mo ilalagay?' }));
             list.forEach(l => box.append(button(l.name, 'small', giveBack(l.id, l.name))));
-          } catch (e) { errorLine('May problema: ' + (e.message || e)); this.disabled = false; }
+          } catch (e) { errorLine(tl(e.message || e)); this.disabled = false; }
         });
         box.append(other);
       }
@@ -211,6 +248,7 @@
       const r = await callServer('getLocation', raw);
       box.innerHTML = '';
       if (!r.found) { box.textContent = 'Hindi nahanap ang lokasyon.'; return; }
+      about = 'Rack: ' + r.name + ' (' + r.id + ')';
       box.append(h('h2', { textContent: r.name }), h('div', { className: 'muted', textContent: r.id }));
 
       box.append(h('h3', { textContent: 'Mga gamit (' + r.items.length + ')' }));
@@ -241,6 +279,7 @@
       const it = await callServer('getItem', id);
       box.innerHTML = '';
       if (!it.found) { box.textContent = 'Hindi nahanap ang item na ito.'; return; }
+      about = 'Item: ' + it.name + ' (' + it.id + ')';
       box.append(h('h2', { textContent: it.name }), h('div', { className: 'muted', textContent: it.id }),
         h('p', { textContent: 'Dami: ' + it.qty }), itemBadge(it),
         h('p', {}, 'Nasa: ', locLink(it.location, it.locationId)));
@@ -250,6 +289,7 @@
 
     // ----- Search -----
     async function initSearch() {
+      about = 'Search page';
       const d = await callServer('getStock');
       box.innerHTML = '';
       box.append(h('h2', { textContent: 'Hanapin ang gamit' }));
@@ -281,7 +321,38 @@
       render();
     }
 
+    // ----- "May problema?" footer and the Ipaalam sa admin form -----
+    function renderFoot() {
+      const f = document.getElementById('foot');
+      f.innerHTML = '';
+      f.append(button('May problema? Ipaalam sa admin', 'small', openReport));
+      f.append(h('div', { textContent: CONTACT ? 'O tawagan si ' + CONTACT : '' }));
+    }
+
+    function openReport() {
+      box.innerHTML = '';
+      box.append(h('h2', { textContent: 'Ipaalam sa admin' }),
+        h('div', { className: 'muted', textContent: about ? 'Tungkol sa: ' + about : '' }));
+      const msg = h('textarea', { placeholder: 'Ano ang problema? (halimbawa: sira ang tool, mali ang dami, may nawawala)', maxLength: 500 });
+      const who = h('input', { placeholder: 'Pangalan mo', value: store.get('tt_name'), autocomplete: 'name' });
+      box.append(msg, who);
+      box.append(button('Ipadala', 'main', function () {
+        if (!msg.value.trim()) { errorLine('Isulat muna kung ano ang problema.'); return; }
+        run(this, 'reportProblem', [msg.value.trim(), who.value.trim(), about], () => {
+          if (who.value.trim()) store.set('tt_name', who.value.trim());
+          box.innerHTML = '';
+          box.append(h('div', { className: 'done' },
+            h('div', { className: 'tick', textContent: '\u2714' }),
+            h('div', { className: 'big', textContent: 'Naipadala na' }),
+            h('div', { className: 'muted', textContent: 'Salamat! Makikita ito ng admin.' })),
+            button('Bumalik', 'small', () => location.reload()));
+        });
+      }));
+      box.append(button('Bumalik', 'small', () => location.reload()));
+    }
+
     async function init() {
+      renderFoot();
       if (!GAS_URL || GAS_URL.includes('PASTE_YOUR')) {
         box.textContent = 'Hindi pa naka-set ang backend URL sa config.js.';
         return;
@@ -293,7 +364,8 @@
         else if (params.get('id')) await showTool(params.get('id'));
         else box.textContent = 'Mag-scan ng QR code ng tool, rack o item.';
       } catch (err) {
-        box.textContent = 'May problema sa pag-load: ' + (err.message || err);
+        box.textContent = tl(err.message || err);
+        renderFoot();
       }
     }
 
