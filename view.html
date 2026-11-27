@@ -112,7 +112,7 @@
       [/Enter where the tool was put back/i, 'Piliin kung saan ibabalik ang tool.'],
       [/not currently borrowed|This tool is not borrowed/i, 'Naisauli na ang tool na ito. I-refresh ang page.'],
       [/already borrowed/i, 'Hawak na ng iba ang tool na ito. I-refresh ang page.'],
-      [/^Location not found/i, 'Hindi nahanap ang rack.'],
+      [/^Location not found/i, 'Hindi nahanap ang lugar na ito.'],
       [/^Item not found/i, 'Hindi nahanap ang item na ito.'],
       [/is not a consumable/i, 'Hindi ito puwedeng kunin.'],
       [/^Quantity must be/i, 'Ang dami ay dapat buong numero, 1 pataas.'],
@@ -233,7 +233,7 @@
           });
         };
         box.append(button('Isauli sa ' + t.location, 'main', giveBack(t.locationId || t.location, t.location)));
-        const other = button('Ibang rack...', 'small', async function () {
+        const other = button('Ibang lugar...', 'small', async function () {
           this.disabled = true;
           try {
             const list = await callServer('listLocations');
@@ -281,7 +281,7 @@
       const r = await callServer('getLocation', raw);
       box.innerHTML = '';
       if (!r.found) { box.textContent = 'Hindi nahanap ang lokasyon.'; return; }
-      about = 'Rack: ' + r.name + ' (' + r.id + ')';
+      about = 'Lokasyon: ' + r.name + ' (' + r.id + ')';
       box.append(h('h2', { textContent: r.name }), h('div', { className: 'muted', textContent: r.id }));
 
       box.append(h('h3', { textContent: 'Mga gamit (' + r.items.length + ')' }));
@@ -395,7 +395,7 @@
         else if (params.get('item')) await showItem(params.get('item'));
         else if (params.has('search')) await initSearch();
         else if (params.get('id')) await showTool(params.get('id'));
-        else box.textContent = 'Mag-scan ng QR code ng tool, rack o item.';
+        else box.textContent = 'Mag-scan ng QR code ng tool, lokasyon o item.';
       } catch (err) {
         box.textContent = tl(err.message || err);
         renderFoot();
