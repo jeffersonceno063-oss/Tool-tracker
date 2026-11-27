@@ -2,45 +2,165 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tool Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4efe6">
+  <title>SGF Inventory System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="config.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
-    * { box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, sans-serif; max-width: 560px; margin: 16px auto; padding: 0 12px 32px; color: #111; }
-    input, button, select { padding: 12px; font-size: 16px; border-radius: 6px; border: 1px solid #bbb; }
-    input, select { width: 100%; margin-bottom: 8px; }
-    button { cursor: pointer; margin: 0 6px 6px 0; background: #f4f4f6; font-weight: 500; touch-action: manipulation; }
-    button:active { background: #e2e2e6; }
-    button.primary { background: #1a73e8; color: #fff; border-color: #1a73e8; }
-    button.primary:active { background: #1558b0; }
-    section { border: 1px solid #ccc; border-radius: 10px; padding: 14px; margin-bottom: 16px; background: #fff; }
-    h2 { margin: 8px 0 14px; }
-    h3, h4 { margin: 8px 0; }
-    .msg { font-size: 16px; min-height: 24px; font-weight: 500; }
-    .row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
-    .row .nm { flex: 1; min-width: 120px; word-break: break-word; }
-    .row button { margin: 0; padding: 10px 12px; }
-    .row button.step { min-width: 48px; font-size: 22px; font-weight: 700; padding: 8px 12px; }
+    :root {
+      --bg: #f4efe6; --paper: #fffdf8; --ink: #17160f; --muted: #6a655a; --line: #e6dfcf; --soft: #efe8d9; --field: #fbf8f1;
+      --yellow: #f7d44c; --yellow-soft: #fff1b3; --night: #1c1b17;
+      --ok: #23764a; --ok-bg: #e0f1e6; --warn: #b87a00; --warn-ink: #7a5000; --warn-bg: #fff0c2; --bad: #b3372a; --bad-bg: #fbe3df;
+      --r-card: 26px; --r-ctl: 14px;
+      --shadow: 0 1px 2px rgba(23,22,15,.05), 0 10px 28px rgba(23,22,15,.07);
+      --nav-h: 70px;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { scroll-padding-bottom: 100px; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 16px; line-height: 1.45; }
+    h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
+    p { margin: 0 0 10px; }
+
+    /* ---------- app frame ---------- */
+    .brand { display: flex; align-items: center; gap: 12px; padding: 18px 16px 6px; max-width: 760px; margin: 0 auto; }
+    .mark { width: 42px; height: 42px; border-radius: 14px; background: var(--ink); color: var(--yellow); display: grid; place-items: center; font-weight: 800; font-size: 14px; letter-spacing: .02em; flex: none; }
+    .brand .name { font-weight: 800; font-size: 17px; line-height: 1.15; }
+    .brand .sub { font-size: 13px; color: var(--muted); font-weight: 500; }
+    main { padding: 8px 16px calc(var(--nav-h) + 28px + env(safe-area-inset-bottom)); max-width: 760px; margin: 0 auto; }
+    .page { margin: 8px 2px 16px; }
+    .page h1 { font-size: 30px; font-weight: 800; line-height: 1.1; }
+    .page p { color: var(--muted); margin: 6px 0 0; max-width: 52ch; }
+
+    /* navigation: bottom bar on phones/tablets, side rail on desktop */
+    .tabs { position: fixed; left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); height: var(--nav-h); z-index: 20;
+            display: flex; gap: 2px; padding: 8px; background: var(--paper); border-radius: 26px; box-shadow: 0 8px 30px rgba(23,22,15,.18), 0 0 0 1px var(--line); max-width: 640px; margin: 0 auto; }
+    .tab { flex: 1; min-width: 0; margin: 0; padding: 4px 2px; border: 0; background: transparent; border-radius: 18px; color: var(--muted);
+           display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font: 600 11px/1.1 inherit; font-family: inherit; cursor: pointer; }
+    .tab .ic { width: 24px; height: 24px; }
+    .tab.active { background: var(--ink); color: #fff; }
+    .tab.active .ic { color: var(--yellow); }
+    .tab:focus-visible, button:focus-visible, a:focus-visible, select:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+    .ic { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+    /* ---------- cards ---------- */
+    section, .card { background: var(--paper); border-radius: var(--r-card); padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow); }
+    section > h3, .card > h3 { font-size: 19px; font-weight: 800; margin-bottom: 4px; }
+    h4 { font-size: 15px; font-weight: 700; margin: 14px 0 8px; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .stack { display: block; }
+
+    /* ---------- controls ---------- */
+    input, select, textarea { font: inherit; font-size: 16px; color: var(--ink); background: var(--field); border: 1.5px solid var(--line); border-radius: var(--r-ctl); padding: 13px 14px; width: 100%; margin-bottom: 10px; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 4px var(--yellow-soft); }
+    ::placeholder { color: #9b9486; }
+    button { font: 600 15px/1 inherit; font-family: inherit; color: var(--ink); background: var(--soft); border: 0; border-radius: 999px; padding: 13px 18px; min-height: 46px; margin: 0 6px 8px 0; cursor: pointer; touch-action: manipulation; transition: background .12s, transform .06s; }
+    button:hover { background: #e7dec9; }
+    button:active { transform: scale(.98); }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    button.primary { background: var(--ink); color: #fff; }
+    button.primary:hover { background: #2c2a20; }
+    .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+    .row .nm { flex: 1; min-width: 130px; word-break: break-word; }
+    .row button { margin: 0; }
     .row input { margin: 0; }
-    input.qty { width: 84px; text-align: center; }
-    .muted { color: #666; font-size: 14px; }
-    .warn { background: #fff3cd; border: 1px solid #e0b100; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 14px; line-height: 1.4; }
-    .err-box { background: #fdecea; border: 1px solid #f5c2c0; color: #8c1d18; border-radius: 8px; padding: 10px 12px; font-size: 14px; line-height: 1.45; margin-top: 8px; display: none; }
-    .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
-    .tabs button { flex: 1; margin: 0; padding: 12px 2px; font-size: 14px; }
-    .low { background: #fff3cd; border: 1px solid #e0b100; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
-    select.type { margin: 0; width: auto; }
-    .tabs button.active { background: #1a73e8; color: #fff; border-color: #1a73e8; }
-    .banner { background: #e8f0fe; border-radius: 8px; padding: 10px 12px; margin: 8px 0 12px; font-weight: 500; line-height: 1.4; }
-    .picked { background: #e6f4ea; border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
-    .res { border-bottom: 1px solid #eee; padding: 8px 0; }
-    .res .t { font-weight: 600; word-break: break-word; }
-    #camBox { margin: 10px 0; display: none; }
-    #reader { width: 100%; border-radius: 8px; overflow: hidden; background: #000; min-height: 220px; }
-    #reader video { width: 100% !important; border-radius: 8px; display: block; }
-    .cam-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .row button.step { min-width: 46px; width: 46px; padding: 0; font-size: 22px; font-weight: 700; }
+    input.qty { width: 84px; text-align: center; font-weight: 700; }
+    select.size-pick, select.type { width: auto; margin: 0 6px 8px 0; }
+    .chip { background: var(--soft); }
+    .chip.active { background: var(--yellow); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
+    .msg { font-size: 15px; font-weight: 600; margin: 8px 0; }
+    .msg:empty { display: none; }
+
+    /* ---------- notices ---------- */
+    .warn { background: var(--yellow-soft); border-radius: 18px; padding: 14px 16px; margin: 0 0 14px; font-size: 14px; line-height: 1.5; }
+    #repBanner button.warn { display: block; width: 100%; text-align: left; font: 700 15px/1.3 inherit; font-family: inherit; min-height: 0; margin: 0 0 14px; padding: 14px 16px; background: var(--yellow); }
+    .err-box { background: var(--bad-bg); color: var(--bad); border-radius: 14px; padding: 12px 14px; font-size: 14px; line-height: 1.45; margin-top: 8px; display: none; }
+    .banner { background: var(--yellow-soft); border-radius: 16px; padding: 12px 14px; margin: 8px 0 14px; font-weight: 600; line-height: 1.4; }
+    .picked { background: var(--ok-bg); border-radius: 16px; padding: 12px 14px; margin: 8px 0; }
+    .low { background: var(--warn-bg); color: var(--ink); border-radius: 14px; padding: 10px 14px; margin-bottom: 8px; }
+
+    /* ---------- lists ---------- */
+    .res { border-bottom: 1px solid var(--line); padding: 12px 0; }
+    .res:last-child { border-bottom: 0; }
+    .res .t { font-weight: 700; word-break: break-word; }
+    .res.row { align-items: center; }
+    #qRes, #sRes, #manage { margin-top: 6px; }
+    #camBox { margin: 12px 0; display: none; }
+    #reader { width: 100%; border-radius: 20px; overflow: hidden; background: #000; min-height: 220px; }
+    #reader video { width: 100% !important; border-radius: 20px; display: block; }
+    .cam-controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .cam-controls button { margin: 0; }
+    .pk { display: flex; align-items: center; gap: 14px; padding: 12px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+    .pk.on { background: var(--yellow-soft); }
+    .pk input[type=checkbox] { width: 26px; height: 26px; margin: 0; flex: none; accent-color: var(--ink); }
+    #pkList { max-height: 380px; overflow-y: auto; margin: 6px 0 10px; border: 1.5px solid var(--line); border-radius: 18px; background: var(--field); }
+    .label .xbtn { width: 100%; margin: 2mm 0 0; padding: 8px; min-height: 0; font-size: 13px; background: var(--bad-bg); color: var(--bad); border-radius: 10px; }
+
+    /* ---------- home dashboard ---------- */
+    .quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+    .quick button { margin: 0; min-height: 84px; padding: 12px 4px; border-radius: 22px; background: var(--paper); box-shadow: var(--shadow); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 13px; }
+    .quick button:first-child { background: var(--ink); color: #fff; }
+    .quick button:first-child .ic { color: var(--yellow); }
+    .quick .ic { width: 26px; height: 26px; }
+    .tiles { display: grid; gap: 16px; }
+    .tiles > .card { margin: 0; }
+    .tools-card { background: var(--yellow); }
+    .tools-card h3 { font-size: 17px; }
+    .big-n { font-size: 64px; font-weight: 800; line-height: .95; letter-spacing: -.03em; margin: 12px 0 4px; }
+    .tools-card .muted { color: #4a4220; }
+    .mini { display: flex; gap: 8px; margin-top: 16px; }
+    .mini div { flex: 1; background: rgba(255,255,255,.55); border-radius: 16px; padding: 10px 12px; }
+    .mini b { display: block; font-size: 22px; font-weight: 800; line-height: 1.1; }
+    .mini span { font-size: 12.5px; color: #4a4220; font-weight: 500; }
+    .donut-wrap { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-top: 10px; }
+    .donut { width: 148px; height: 148px; flex: none; }
+    .donut .center-n { font-size: 30px; font-weight: 800; fill: var(--ink); }
+    .donut .center-l { font-size: 11px; font-weight: 600; fill: var(--muted); }
+    .legend { flex: 1; min-width: 140px; }
+    .legend div { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-weight: 600; font-size: 15px; }
+    .legend i { width: 12px; height: 12px; border-radius: 4px; flex: none; }
+    .legend b { margin-left: auto; font-weight: 800; }
+    .night { background: var(--night); color: #fff; }
+    .night h3 { color: #fff; }
+    .night .muted { color: #b9b3a3; }
+    .night .item-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid #36342c; }
+    .night .item-row:last-of-type { border-bottom: 0; }
+    .night .item-row .nm { flex: 1; min-width: 0; }
+    .night .item-row b { display: block; font-weight: 700; }
+    .night .pill { background: var(--yellow); color: var(--ink); border-radius: 999px; padding: 5px 12px; font-weight: 800; font-size: 13px; white-space: nowrap; }
+    .night .pill.red { background: #ff9d8f; }
+    .night button { background: var(--yellow); color: var(--ink); margin: 14px 0 0; }
+    .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .facts div { background: var(--paper); border-radius: 20px; padding: 14px; box-shadow: var(--shadow); }
+    .facts b { display: block; font-size: 26px; font-weight: 800; line-height: 1.1; }
+    .facts span { font-size: 13px; color: var(--muted); font-weight: 500; }
+
+    /* ---------- tablet and desktop ---------- */
+    @media (min-width: 700px) {
+      main, .brand { max-width: 860px; }
+      .tiles { grid-template-columns: 1fr 1fr; }
+      .quick button { flex-direction: row; justify-content: center; font-size: 15px; min-height: 64px; }
+    }
+    @media (min-width: 980px) {
+      body { padding-left: 240px; }
+      .brand { position: fixed; top: 0; left: 0; width: 240px; padding: 22px 20px; margin: 0; max-width: none; z-index: 21; }
+      .tabs { top: 96px; bottom: auto; left: 12px; right: auto; width: 216px; height: auto; max-width: none; flex-direction: column; gap: 4px; padding: 10px; border-radius: 26px; }
+      .tab { flex: none; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 13px 16px; font-size: 15px; font-weight: 700; }
+      main { max-width: 1120px; padding: 28px 36px 48px; margin: 0; }
+      .page h1 { font-size: 34px; }
+      .quick { max-width: 640px; }
+      .tiles { grid-template-columns: 1fr 1fr; }
+      .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+      .two > section { margin-bottom: 0; }
+      #tab-scan .card-wide, #tab-transfer > section, #tab-search > section { max-width: 760px; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+    /* ---------- printing: only the labels ---------- */
     #labels { display: flex; flex-wrap: wrap; margin-top: 12px; --tt: 12pt; --hh: 7.5pt; }
     #labels.size-s { --tt: 9pt; --hh: 6pt; }
     #labels.size-l { --tt: 18pt; --hh: 10pt; }
@@ -48,7 +168,6 @@
     #labels.size-m .label { width: 55mm; }
     #labels.size-l .label { width: 85mm; }
     .label { border: 1px dashed #777; margin: 0 -1px -1px 0; padding: 2.5mm; text-align: center; background: #fff; color: #000;
-             display: flex; flex-direction: column; align-items: center; break-inside: avoid; page-break-inside: avoid; }
     .label .tag { font-size: var(--hh); font-weight: 700; letter-spacing: .1em; border: 1px solid #000; border-radius: 2mm; padding: 0 2.5mm; margin-bottom: 1.5mm; }
     .label .qr { width: 100%; }
     .label .qr canvas, .label .qr img { width: 100% !important; height: auto !important; display: block; }
@@ -56,163 +175,202 @@
     .label .code { font-size: var(--hh); color: #333; margin-top: .5mm; }
     .label .hint { font-size: var(--hh); color: #333; margin-top: 1mm; }
     .label .xbtn { width: 100%; margin: 2mm 0 0; padding: 6px 8px; font-size: 13px; background: #fdecea; border-color: #f5c2c0; color: #8c1d18; }
-    .chip.active { background: #1a73e8; color: #fff; border-color: #1a73e8; }
-    .pk { display: flex; align-items: center; gap: 12px; padding: 10px 6px; border-bottom: 1px solid #eee; cursor: pointer; }
-    .pk.on { background: #e8f0fe; }
-    .pk input[type=checkbox] { width: 26px; height: 26px; margin: 0; flex: none; }
-    #pkList { max-height: 360px; overflow-y: auto; margin-bottom: 8px; border: 1px solid #eee; border-radius: 8px; }
-    .size-pick { width: auto; margin: 0 6px 6px 0; padding: 12px; }
     @page { size: A4; margin: 8mm; }
-    @media print { .no-print { display: none !important; } body { margin: 0; max-width: none; padding: 0; } #labels { display: flex !important; margin: 0; } }
+    @media print { .no-print { display: none !important; } body { margin: 0; padding: 0; background: #fff; } #labels { display: flex !important; margin: 0; } }
   </style>
 </head>
 <body>
-  <div class="no-print">
-    <h2>Tool Tracker</h2>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3.5 11 12 4l8.5 7v8.5a1 1 0 0 1-1 1H15v-6H9v6H4.5a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M4 12h16"/></symbol>
+    <symbol id="i-move" viewBox="0 0 24 24"><path d="M4 8h14M14 4l4 4-4 4M20 16H6M10 12l-4 4 4 4"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5zM3.5 7.5 12 12l8.5-4.5M12 12v9"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M19 7h1M4 17h1M11 17h9"/><circle cx="16" cy="7" r="2.2"/><circle cx="8" cy="17" r="2.2"/></symbol>
+    <symbol id="i-count" viewBox="0 0 24 24"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1zM8 6H6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-2M9 13l2 2 4-4"/></symbol>
+  </svg>
 
-    <div id="configWarn" class="warn" style="display:none">
-      <strong>Setup required:</strong> Open <code>config.js</code> in your GitHub repository and paste your Google Apps Script Web App URL (ending in <code>/exec</code>).
-    </div>
+  <div class="no-print app">
+    <header class="brand">
+      <div class="mark" aria-hidden="true">SGF</div>
+      <div><div class="name">SGF Inventory System</div><div class="sub">Tools, items and supplies</div></div>
+    </header>
 
-    <div id="webviewWarn" class="warn" style="display:none">
-      <strong>In-app browser detected:</strong> Apps like Messenger, Facebook, or Viber often block the phone camera. Tap the <strong>&#8942;</strong> menu at the top-right and select <strong>Open in Chrome</strong>.
-    </div>
+    <nav class="tabs" aria-label="Main">
+      <button class="tab" data-tab="home"><svg class="ic"><use href="#i-home"/></svg>Home</button>
+      <button class="tab" data-tab="scan"><svg class="ic"><use href="#i-scan"/></svg>Scan</button>
+      <button class="tab" data-tab="transfer"><svg class="ic"><use href="#i-move"/></svg>Move</button>
+      <button class="tab" data-tab="search"><svg class="ic"><use href="#i-search"/></svg>Search</button>
+      <button class="tab" data-tab="stock"><svg class="ic"><use href="#i-box"/></svg>Stock</button>
+      <button class="tab" data-tab="manage"><svg class="ic"><use href="#i-sliders"/></svg>Manage</button>
+    </nav>
 
-    <div class="tabs">
-      <button class="tab" data-tab="scan">Scan</button>
-      <button class="tab" data-tab="transfer">Transfer</button>
-      <button class="tab" data-tab="search">Search</button>
-      <button class="tab" data-tab="stock">Stock</button>
-      <button class="tab" data-tab="manage">Manage</button>
-    </div>
+    <main>
+      <div id="configWarn" class="warn" style="display:none">
+        <strong>Setup needed:</strong> open <code>config.js</code> in your GitHub repository and paste your Google Apps Script Web App URL (it ends in <code>/exec</code>).
+      </div>
+      <div id="webviewWarn" class="warn" style="display:none">
+        <strong>This in-app browser may block the camera.</strong> Tap the <strong>&#8942;</strong> menu at the top right and choose <strong>Open in Chrome</strong>.
+      </div>
+      <div id="repBanner" style="display:none"></div>
 
-    <div id="repBanner" style="display:none"></div>
-
-    <!-- ===== SCAN TAB ===== -->
-    <div id="tab-scan">
-      <section>
-        <h3>Scan QR or Barcode</h3>
-        <input id="scan" placeholder="Scan or type code (e.g. TL-001, IT-001 or LOC-001)" autocomplete="off">
-        <div class="row">
-          <button class="primary" onclick="startCamera()">Scan with camera</button>
-          <button onclick="$('photo').click()">Scan from photo</button>
+      <!-- ===== HOME ===== -->
+      <div id="tab-home">
+        <div class="page"><h1>Overview</h1><p>What is out, what is running low, and what needs you today.</p></div>
+        <div class="quick">
+          <button class="primary" onclick="showTab('scan')"><svg class="ic"><use href="#i-scan"/></svg>Scan</button>
+          <button onclick="showTab('transfer')"><svg class="ic"><use href="#i-move"/></svg>Move</button>
+          <button onclick="showTab('search')"><svg class="ic"><use href="#i-search"/></svg>Search</button>
+          <button onclick="showTab('stock'); $('cLoc').focus()"><svg class="ic"><use href="#i-count"/></svg>Count</button>
         </div>
-        <div id="camHost-scan"></div>
-        <div id="card"></div>
-        <p id="msg" class="msg"></p>
-      </section>
-    </div>
+        <p id="hmsg" class="msg"></p>
+        <div id="homeBody"><p class="muted">Loading your numbers...</p></div>
+      </div>
 
-    <!-- ===== TRANSFER TAB ===== -->
-    <div id="tab-transfer" style="display:none">
-      <section>
-        <h3>Transfer</h3>
-        <input id="tScan" placeholder="Scan or type here" autocomplete="off">
-        <div class="row">
-          <button class="primary" onclick="startCamera()">Scan with camera</button>
-          <button onclick="$('photo').click()">Scan from photo</button>
-          <button onclick="resetTransfer()">Start over</button>
-        </div>
-        <div id="camHost-transfer"></div>
-        <div id="tBody"></div>
-        <p id="tmsg" class="msg"></p>
-      </section>
-    </div>
+      <!-- ===== SCAN ===== -->
+      <div id="tab-scan" style="display:none">
+        <div class="page"><h1>Scan</h1><p>Scan a rack, tool or item to see it and update it.</p></div>
+        <section>
+          <input id="scan" placeholder="Scan or type a code (TL-001, IT-001, LOC-001)" autocomplete="off">
+          <div class="row">
+            <button class="primary" onclick="startCamera()">Scan with camera</button>
+            <button onclick="$('photo').click()">Scan from photo</button>
+          </div>
+          <div id="camHost-scan"></div>
+          <p id="msg" class="msg"></p>
+          <div id="card"></div>
+        </section>
+      </div>
 
-    <!-- ===== SEARCH TAB ===== -->
-    <div id="tab-search" style="display:none">
-      <section>
-        <h3>Search</h3>
-        <input id="q" placeholder="Type an item or tool name..." autocomplete="off">
-        <div id="qRes"></div>
-        <p id="smsg" class="msg"></p>
-      </section>
-    </div>
+      <!-- ===== MOVE ===== -->
+      <div id="tab-transfer" style="display:none">
+        <div class="page"><h1>Move items</h1><p>Scan the rack it is in, pick the item, then scan the rack it is going to.</p></div>
+        <section>
+          <input id="tScan" placeholder="Scan or type here" autocomplete="off">
+          <div class="row">
+            <button class="primary" onclick="startCamera()">Scan with camera</button>
+            <button onclick="$('photo').click()">Scan from photo</button>
+            <button onclick="resetTransfer()">Start over</button>
+          </div>
+          <div id="camHost-transfer"></div>
+          <p id="tmsg" class="msg"></p>
+          <div id="tBody"></div>
+        </section>
+      </div>
 
-    <!-- ===== STOCK TAB ===== -->
-    <div id="tab-stock" style="display:none">
-      <section>
-        <h3>Stock / Consumables</h3>
-        <div id="lowBox"></div>
-        <input id="sq" placeholder="Filter consumables..." autocomplete="off">
-        <div id="sRes"></div>
+      <!-- ===== SEARCH ===== -->
+      <div id="tab-search" style="display:none">
+        <div class="page"><h1>Find anything</h1><p>Type a name to see where it is and how many there are.</p></div>
+        <section>
+          <input id="q" placeholder="Type an item or tool name" autocomplete="off">
+          <p id="smsg" class="msg"></p>
+          <div id="qRes"></div>
+        </section>
+      </div>
+
+      <!-- ===== STOCK ===== -->
+      <div id="tab-stock" style="display:none">
+        <div class="page"><h1>Stock</h1><p>Consumables, restocking, usage and counting.</p></div>
         <p id="kmsg" class="msg"></p>
-      </section>
-
-      <section>
-        <h3>Usage report</h3>
-        <p class="muted">How many consumables were taken, and how long the stock will last at that pace.</p>
-        <div class="row">
-          <select id="uDays" style="width:auto;margin:0">
-            <option value="7">Last 7 days</option>
-            <option value="30" selected>Last 30 days</option>
-            <option value="90">Last 90 days</option>
-          </select>
-          <button class="primary" onclick="loadUsage()">Show report</button>
+        <div class="two">
+          <section>
+            <h3>Consumables</h3>
+            <div id="lowBox"></div>
+            <input id="sq" placeholder="Filter consumables" autocomplete="off">
+            <div id="sRes"></div>
+          </section>
+          <div>
+            <section>
+              <h3>Usage report</h3>
+              <p class="muted">How many were taken, and how long the stock lasts at that pace.</p>
+              <div class="row">
+                <select id="uDays" style="width:auto;margin:0">
+                  <option value="7">Last 7 days</option>
+                  <option value="30" selected>Last 30 days</option>
+                  <option value="90">Last 90 days</option>
+                </select>
+                <button class="primary" onclick="loadUsage()">Show report</button>
+              </div>
+              <div id="uRes"></div>
+            </section>
+            <section>
+              <h3>Count a location</h3>
+              <p class="muted">Check the real stock against the Sheet. Differences are fixed and saved in the Log.</p>
+              <input id="cLoc" list="locs" placeholder="Location to count (for example Bodega)" autocomplete="off">
+              <button class="primary" onclick="startCount()">Start count</button>
+              <div id="cBody"></div>
+            </section>
+          </div>
         </div>
-        <div id="uRes"></div>
-      </section>
+      </div>
 
-      <section>
-        <h3>Count a location</h3>
-        <p class="muted">Check the real stock against the Sheet. Differences are fixed and recorded in the Log.</p>
-        <input id="cLoc" list="locs" placeholder="Location to count (e.g. Bodega)" autocomplete="off">
-        <button class="primary" onclick="startCount()">Start count</button>
-        <div id="cBody"></div>
-      </section>
-    </div>
-
-    <!-- ===== MANAGE TAB ===== -->
-    <div id="tab-manage" style="display:none">
-      <section>
-        <h3>Add a tool</h3>
-        <input id="newName" placeholder="Tool name (e.g. Hammer)">
-        <button onclick="addToolUi()">Add + create QR</button>
-      </section>
-
-      <section>
-        <h3>Add a location</h3>
-        <p class="muted">A rack, shelf or room. Scanning its QR shows the items stored there.</p>
-        <input id="newLoc" placeholder="Location name (e.g. Rack A)">
-        <button onclick="addLocationUi()">Add + create QR</button>
-      </section>
-
-      <section>
-        <h3>Manage</h3>
-        <button onclick="showManage('locations')">Locations</button>
-        <button onclick="showManage('tools')">Tools</button>
-        <button onclick="showManage('items')">Items</button>
-        <button onclick="showManage('reports')">Reports</button>
-        <div id="manage"></div>
-      </section>
-
-      <section>
-        <h3>Labels</h3>
-        <p class="muted">Tick the labels you want, then press Print. Only the ticked ones are printed.</p>
-        <div class="row" id="pkChips">
-          <button class="chip" data-k="all">All</button>
-          <button class="chip" data-k="rack">Racks</button>
-          <button class="chip" data-k="tool">Tools</button>
-          <button class="chip" data-k="item">Items</button>
-        </div>
-        <input id="pkq" placeholder="Search the list..." autocomplete="off">
-        <div id="pkList"><p class="muted">Loading...</p></div>
-        <div class="row">
-          <button onclick="pickAllShown()">Tick all shown</button>
-          <button onclick="pickClear()">Untick all</button>
-        </div>
-        <div class="row">
-          <select id="labelSize" class="size-pick" onchange="setLabelSize()">
-            <option value="s">Small (3.8 cm)</option>
-            <option value="m" selected>Medium (5.5 cm)</option>
-            <option value="l">Large (8.5 cm)</option>
-          </select>
-          <button id="pkShow" onclick="pickShow()">Show labels</button>
-          <button id="pkPrint" class="primary" onclick="pickPrint()">Print</button>
-        </div>
-        <button onclick="clearLabels()">Clear labels below</button>
+      <!-- ===== MANAGE ===== -->
+      <div id="tab-manage" style="display:none">
+        <div class="page"><h1>Manage</h1><p>Add tools and racks, edit lists, read staff reports, print labels.</p></div>
         <p id="mmsg" class="msg"></p>
-      </section>
+        <div class="two">
+          <div>
+            <section>
+              <h3>Add a tool</h3>
+              <input id="newName" placeholder="Tool name (for example Hammer)">
+              <button class="primary" onclick="addToolUi()">Add tool and make QR</button>
+            </section>
+            <section>
+              <h3>Add a rack or room</h3>
+              <p class="muted">Scanning its QR shows what is stored there.</p>
+              <input id="newLoc" placeholder="Name (for example Rack A)">
+              <button class="primary" onclick="addLocationUi()">Add rack and make QR</button>
+            </section>
+            <section>
+              <h3>Lists</h3>
+              <button onclick="showManage('locations')">Racks</button>
+              <button onclick="showManage('tools')">Tools</button>
+              <button onclick="showManage('items')">Items</button>
+              <button onclick="showManage('reports')">Reports</button>
+              <div id="manage"></div>
+            </section>
+          </div>
+          <section>
+            <h3>Print labels</h3>
+            <p class="muted">Tick the labels you want, then press Print. Only the ticked ones are printed.</p>
+            <div class="row" id="pkChips">
+              <button class="chip" data-k="all">All</button>
+              <button class="chip" data-k="rack">Racks</button>
+              <button class="chip" data-k="tool">Tools</button>
+              <button class="chip" data-k="item">Items</button>
+            </div>
+            <input id="pkq" placeholder="Search the list" autocomplete="off">
+            <div id="pkList"><p class="muted" style="padding:12px">Loading...</p></div>
+            <div class="row">
+              <button onclick="pickAllShown()">Tick all shown</button>
+              <button onclick="pickClear()">Untick all</button>
+            </div>
+            <div class="row">
+              <select id="labelSize" class="size-pick" onchange="setLabelSize()">
+                <option value="s">Small (3.8 cm)</option>
+                <option value="m" selected>Medium (5.5 cm)</option>
+                <option value="l">Large (8.5 cm)</option>
+              </select>
+              <button id="pkShow" onclick="pickShow()">Show labels</button>
+              <button id="pkPrint" class="primary" onclick="pickPrint()">Print</button>
+            </div>
+            <button onclick="clearLabels()">Clear labels below</button>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <!-- Camera box: moved between the Scan and Move tabs -->
+    <div id="camShared">
+      <div id="camBox">
+        <div id="reader"></div>
+        <div class="cam-controls">
+          <button onclick="stopCamera()">Stop camera</button>
+          <button id="btnSwitchCam" style="display:none" onclick="switchCamera()">Switch camera</button>
+          <button id="btnTorch" style="display:none" onclick="toggleTorch()">Flashlight</button>
+        </div>
+      </div>
+      <div id="camHelp" class="err-box"></div>
     </div>
   </div>
 
@@ -220,19 +378,6 @@
   <div id="photoReaderHidden" style="display:none"></div>
   <datalist id="locs"></datalist>
   <input id="photo" type="file" accept="image/*" capture="environment" style="display:none">
-
-  <!-- Camera box: moved between the Scan and Transfer tabs -->
-  <div id="camShared">
-    <div id="camBox">
-      <div id="reader"></div>
-      <div class="cam-controls">
-        <button onclick="stopCamera()">Stop camera</button>
-        <button id="btnSwitchCam" style="display:none" onclick="switchCamera()">Switch camera</button>
-        <button id="btnTorch" style="display:none" onclick="toggleTorch()">Flashlight</button>
-      </div>
-    </div>
-    <div id="camHelp" class="err-box"></div>
-  </div>
 
   <script>
     const $ = id => document.getElementById(id);
@@ -242,8 +387,8 @@
 
     const card = $('card'), manage = $('manage');
     const isTouch = matchMedia('(pointer: coarse)').matches;
-    const MSG_ID = { scan: 'msg', transfer: 'tmsg', search: 'smsg', stock: 'kmsg', manage: 'mmsg' };
-    let activeTab = 'scan';
+    const MSG_ID = { home: 'hmsg', scan: 'msg', transfer: 'tmsg', search: 'smsg', stock: 'kmsg', manage: 'mmsg' };
+    let activeTab = 'home';
     let manageMode = null;
     let awaitingRack = null;     // { kind: 'return' | 'set', id } - next rack scan completes it
     let stockCache = null;       // { t, data } for the Search tab
@@ -258,7 +403,7 @@
     function say(text, ok) {
       const m = $(MSG_ID[activeTab]);
       m.textContent = text || '';
-      m.style.color = ok === undefined ? '#111' : (ok ? '#0d7a2c' : '#b00020');
+      m.style.color = ok === undefined ? 'var(--ink)' : (ok ? 'var(--ok)' : 'var(--bad)');
     }
 
     function fail(err) {
@@ -267,17 +412,18 @@
 
     // ----- Tabs -----
     function showTab(name) {
-      if (name === activeTab) return;
+      if (name === activeTab) { if (name === 'home') loadHome(); return; }
       stopCamera();
       awaitingRack = null;
       activeTab = name;
-      ['scan', 'transfer', 'search', 'stock', 'manage'].forEach(n => {
+      ['home', 'scan', 'transfer', 'search', 'stock', 'manage'].forEach(n => {
         $('tab-' + n).style.display = n === name ? 'block' : 'none';
       });
       document.querySelectorAll('.tabs .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
       $('labels').style.display = (name === 'scan' || name === 'manage') ? 'flex' : 'none';
       if (name === 'scan' || name === 'transfer') $('camHost-' + name).append($('camBox'), $('camHelp'));
       showCamHelp('');
+      if (name === 'home') loadHome();
       if (name === 'search') { renderSearch(); loadStock(); }
       if (name === 'stock') { stockCache = null; loadStockTab(); }
       if (name === 'manage') { loadPicker(); if (manageMode) refreshManage(); }
@@ -865,9 +1011,111 @@
     }
     $('q').addEventListener('input', renderSearch);
 
+    // ----- Home dashboard -----
+    function loadHome() {
+      const body = $('homeBody');
+      if (!isConfigured()) {
+        body.innerHTML = '';
+        body.append(h('p', { className: 'muted', textContent: 'Set your Google Apps Script /exec URL in config.js first.' }));
+        return;
+      }
+      Promise.all([callServer('getStock'), callServer('listLocations'), callServer('listReports')]).then(([d, locs, reps]) => {
+        stockCache = { t: Date.now(), data: d };
+        showReportBanner(reps);
+        say('');
+        renderHome(d, locs);
+      }).catch(err => {
+        body.innerHTML = '';
+        body.append(h('p', { className: 'muted', textContent: 'Could not load the numbers. Check your connection and try again.' }),
+          h('button', { className: 'primary', textContent: 'Try again', onclick: loadHome }));
+        fail(err);
+      });
+    }
+
+    function donutSvg(parts, total) {
+      const R = 56, C = 2 * Math.PI * R;
+      let off = 0, rings = '';
+      parts.forEach(p => {
+        if (!p.n) return;
+        const len = C * p.n / total;
+        rings += '<circle cx="74" cy="74" r="' + R + '" fill="none" stroke-width="20" style="stroke:' + p.color + '" ' +
+                 'stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) + '"/>';
+        off += len;
+      });
+      return '<svg class="donut" viewBox="0 0 148 148" role="img" aria-label="Consumable stock status">' +
+        '<circle cx="74" cy="74" r="' + R + '" fill="none" stroke-width="20" style="stroke:var(--soft)"/>' +
+        '<g transform="rotate(-90 74 74)">' + rings + '</g>' +
+        '<text x="74" y="78" text-anchor="middle" class="center-n">' + total + '</text>' +
+        '<text x="74" y="96" text-anchor="middle" class="center-l">consumables</text></svg>';
+    }
+
+    function renderHome(d, locs) {
+      const body = $('homeBody');
+      body.innerHTML = '';
+      const tools = d.tools, out = tools.filter(t => t.status === 'Borrowed');
+      const cons = d.items.filter(i => i.type === 'Consumable');
+      const none = cons.filter(i => i.qty === 0);
+      const low = cons.filter(i => i.qty > 0 && i.min > 0 && i.qty <= i.min);
+      const ok = cons.length - none.length - low.length;
+      const tiles = h('div', { className: 'tiles' });
+
+      // Tools
+      tiles.append(h('div', { className: 'card tools-card' },
+        h('h3', { textContent: 'Tools' }),
+        h('div', { className: 'big-n', textContent: String(tools.length) }),
+        h('div', { className: 'muted', textContent: tools.length === 1 ? 'tool in the system' : 'tools in the system' }),
+        h('div', { className: 'mini' },
+          h('div', {}, h('b', { textContent: String(tools.length - out.length) }), h('span', { textContent: 'On the rack' })),
+          h('div', {}, h('b', { textContent: String(out.length) }), h('span', { textContent: 'With someone' })))));
+
+      // Consumable stock donut
+      const stockCard = h('div', { className: 'card' }, h('h3', { textContent: 'Consumable stock' }));
+      if (!cons.length) {
+        stockCard.append(h('p', { className: 'muted', style: 'margin-top:10px', textContent: 'No consumables yet. Open a rack, press Edit on an item and set its type to Consumable.' }));
+      } else {
+        const parts = [
+          { n: ok, color: 'var(--ink)', label: 'Enough' },
+          { n: low.length, color: 'var(--yellow)', label: 'Running low' },
+          { n: none.length, color: 'var(--bad)', label: 'Out' }
+        ];
+        const wrap = h('div', { className: 'donut-wrap' });
+        const holder = h('div');
+        holder.innerHTML = donutSvg(parts, cons.length);
+        const legend = h('div', { className: 'legend' });
+        parts.forEach(p => legend.append(h('div', {}, h('i', { style: 'background:' + p.color }), p.label, h('b', { textContent: String(p.n) }))));
+        wrap.append(holder.firstChild, legend);
+        stockCard.append(wrap);
+      }
+      tiles.append(stockCard);
+
+      // Running low (dark card)
+      const need = low.concat(none).sort((a, b) => (a.qty / (a.min || 1)) - (b.qty / (b.min || 1))).slice(0, 5);
+      const night = h('div', { className: 'card night span2' }, h('h3', { textContent: 'Needs restocking' }));
+      if (!need.length) night.append(h('p', { className: 'muted', style: 'margin:10px 0 0', textContent: 'Everything is above its minimum. Nothing to reorder.' }));
+      need.forEach(i => night.append(h('div', { className: 'item-row' },
+        h('div', { className: 'nm' }, h('b', { textContent: i.name }), h('span', { className: 'muted', textContent: i.location || 'no location' })),
+        h('span', { className: 'pill' + (i.qty === 0 ? ' red' : ''), textContent: i.qty === 0 ? 'Out' : i.qty + ' left (min ' + i.min + ')' }))));
+      night.append(h('button', { textContent: 'Open stock', onclick: () => showTab('stock') }));
+      tiles.append(night);
+
+      // With people
+      const people = h('div', { className: 'card span2' }, h('h3', { textContent: 'Tools with people' }));
+      if (!out.length) people.append(h('p', { className: 'muted', style: 'margin:10px 0 0', textContent: 'Nothing is borrowed right now.' }));
+      out.forEach(t => people.append(h('div', { className: 'res row' },
+        h('div', { className: 'nm' }, h('div', { className: 't', textContent: t.name }), h('div', { className: 'muted', textContent: 'with ' + t.borrower + ' - belongs in ' + (t.location || 'no rack') })),
+        h('button', { textContent: 'Open', onclick: () => lookup(t.id) }))));
+      tiles.append(people);
+      body.append(tiles);
+
+      body.append(h('div', { className: 'facts', style: 'margin-top:16px' },
+        h('div', {}, h('b', { textContent: String(locs.length) }), h('span', { textContent: 'Racks and rooms' })),
+        h('div', {}, h('b', { textContent: String(d.items.length) }), h('span', { textContent: 'Items' })),
+        h('div', {}, h('b', { textContent: String(tools.length) }), h('span', { textContent: 'Tools' }))));
+    }
+
     // ----- Stock tab (consumables) -----
     function restockRow(it, after) {
-      const n = h('input', { type: 'number', min: '1', placeholder: 'Add how many?', className: 'qty', style: 'width:140px' });
+      const n = h('input', { type: 'number', min: '1', placeholder: 'Qty to add', className: 'qty', style: 'width:120px' });
       return h('div', { className: 'row' }, n,
         h('button', { className: 'primary', textContent: 'Restock (+)', onclick: () => act('restock', [it.id, n.value, 'restock'], after) }));
     }
@@ -1512,18 +1760,18 @@
       if (sz && $('labelSize').querySelector('option[value="' + sz + '"]')) { $('labelSize').value = sz; setLabelSize(); }
     } catch (_) {}
 
-    // Initial tab state (scan tab is shown first)
-    document.querySelectorAll('.tabs .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'scan'));
+    // Initial tab state (Home is shown first)
+    document.querySelectorAll('.tabs .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'home'));
     $('camHost-scan').append($('camBox'), $('camHelp'));
     renderTransfer();
     loadLocs();
-    loadReportBanner();
 
-    // Auto-open tool, item or location if navigated with ?id=, ?item= or ?loc=
+    // Auto-open tool, item or location if navigated with ?id=, ?item= or ?loc=; otherwise show Home
     if (window.location.search) {
+      loadReportBanner();
       handleScan(window.location.search);
-    } else if (!isTouch) {
-      $('scan').focus();
+    } else {
+      loadHome();
     }
   </script>
 </body>
