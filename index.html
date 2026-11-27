@@ -168,6 +168,7 @@
     #labels.size-m .label { width: 55mm; }
     #labels.size-l .label { width: 85mm; }
     .label { border: 1px dashed #777; margin: 0 -1px -1px 0; padding: 2.5mm; text-align: center; background: #fff; color: #000;
+             display: flex; flex-direction: column; align-items: center; break-inside: avoid; page-break-inside: avoid; }
     .label .tag { font-size: var(--hh); font-weight: 700; letter-spacing: .1em; border: 1px solid #000; border-radius: 2mm; padding: 0 2.5mm; margin-bottom: 1.5mm; }
     .label .qr { width: 100%; }
     .label .qr canvas, .label .qr img { width: 100% !important; height: auto !important; display: block; }
@@ -229,7 +230,7 @@
 
       <!-- ===== SCAN ===== -->
       <div id="tab-scan" style="display:none">
-        <div class="page"><h1>Scan</h1><p>Scan a rack, tool or item to see it and update it.</p></div>
+        <div class="page"><h1>Scan</h1><p>Scan a location (rack, drawer, shelf), tool or item to see it and update it.</p></div>
         <section>
           <input id="scan" placeholder="Scan or type a code (TL-001, IT-001, LOC-001)" autocomplete="off">
           <div class="row">
@@ -244,7 +245,7 @@
 
       <!-- ===== MOVE ===== -->
       <div id="tab-transfer" style="display:none">
-        <div class="page"><h1>Move items</h1><p>Scan the rack it is in, pick the item, then scan the rack it is going to.</p></div>
+        <div class="page"><h1>Move items</h1><p>Scan the place it is in, pick the item, then scan the place it is going to.</p></div>
         <section>
           <input id="tScan" placeholder="Scan or type here" autocomplete="off">
           <div class="row">
@@ -306,7 +307,7 @@
 
       <!-- ===== MANAGE ===== -->
       <div id="tab-manage" style="display:none">
-        <div class="page"><h1>Manage</h1><p>Add tools and racks, edit lists, read staff reports, print labels.</p></div>
+        <div class="page"><h1>Manage</h1><p>Add tools and locations, edit lists, read staff reports, print labels.</p></div>
         <p id="mmsg" class="msg"></p>
         <div class="two">
           <div>
@@ -316,14 +317,14 @@
               <button class="primary" onclick="addToolUi()">Add tool and make QR</button>
             </section>
             <section>
-              <h3>Add a rack or room</h3>
+              <h3>Add a location</h3>
               <p class="muted">Scanning its QR shows what is stored there.</p>
-              <input id="newLoc" placeholder="Name (for example Rack A)">
-              <button class="primary" onclick="addLocationUi()">Add rack and make QR</button>
+              <input id="newLoc" placeholder="Name (for example Rack A, Drawer 3, Bodega)">
+              <button class="primary" onclick="addLocationUi()">Add location and make QR</button>
             </section>
             <section>
               <h3>Lists</h3>
-              <button onclick="showManage('locations')">Racks</button>
+              <button onclick="showManage('locations')">Locations</button>
               <button onclick="showManage('tools')">Tools</button>
               <button onclick="showManage('items')">Items</button>
               <button onclick="showManage('reports')">Reports</button>
@@ -335,7 +336,7 @@
             <p class="muted">Tick the labels you want, then press Print. Only the ticked ones are printed.</p>
             <div class="row" id="pkChips">
               <button class="chip" data-k="all">All</button>
-              <button class="chip" data-k="rack">Racks</button>
+              <button class="chip" data-k="rack">Locations</button>
               <button class="chip" data-k="tool">Tools</button>
               <button class="chip" data-k="item">Items</button>
             </div>
@@ -344,6 +345,18 @@
             <div class="row">
               <button onclick="pickAllShown()">Tick all shown</button>
               <button onclick="pickClear()">Untick all</button>
+            </div>
+            <div class="row">
+              <span class="muted">Tag on location labels:</span>
+              <select id="locTag" class="size-pick" onchange="setLocTag()">
+                <option value="auto" selected>Auto (from the name)</option>
+                <option value="Rack">Rack</option>
+                <option value="Drawer">Drawer</option>
+                <option value="Shelf">Shelf</option>
+                <option value="Cabinet">Cabinet</option>
+                <option value="Location">Location</option>
+                <option value="none">No tag</option>
+              </select>
             </div>
             <div class="row">
               <select id="labelSize" class="size-pick" onchange="setLabelSize()">
@@ -355,6 +368,7 @@
               <button id="pkPrint" class="primary" onclick="pickPrint()">Print</button>
             </div>
             <button onclick="clearLabels()">Clear labels below</button>
+            <p class="muted">Tip: in the print window, open <b>More settings</b> and turn off <b>Headers and footers</b>.</p>
           </section>
         </div>
       </div>
@@ -571,7 +585,7 @@
 
     function armRack(kind, id) {
       awaitingRack = { kind: kind, id: id };
-      say('Now scan the QR of the rack.', undefined);
+      say('Now scan the QR of the location.', undefined);
       startCamera();
     }
 
@@ -589,14 +603,14 @@
 
       if (!t.location) {
         card.append(h('p', { textContent: 'No location yet. Where is this stored?' }));
-        const loc = locInput('e.g. Rack A, Storage room');
+        const loc = locInput('e.g. Rack A, Drawer 3, Storage room');
         card.append(loc,
           h('button', {
             className: 'primary',
             textContent: 'Save location',
             onclick: () => act('setLocation', [t.id, loc.value], r => lookup(t.id, r.msg, true))
           }),
-          h('button', { textContent: 'Scan rack QR', onclick: () => armRack('set', t.id) }));
+          h('button', { textContent: 'Scan location QR', onclick: () => armRack('set', t.id) }));
       } else if (t.status !== 'Borrowed') {
         card.append(h('p', { textContent: 'Location: ' + t.location + ' | Available' }));
         const who = h('input', { placeholder: 'Who is borrowing it?' });
@@ -606,10 +620,10 @@
           onclick: () => act('borrowTool', [t.id, who.value], r => lookup(t.id, r.msg, true))
         }));
       } else {
-        card.append(h('p', { textContent: 'Borrowed by ' + t.borrower + '. Scan the rack QR where it is being returned, or type the location.' }));
+        card.append(h('p', { textContent: 'Borrowed by ' + t.borrower + '. Scan the location QR where it is being returned, or type the location.' }));
         const loc = locInput('Location', t.location);
         card.append(
-          h('button', { className: 'primary', textContent: 'Scan rack QR to return', onclick: () => armRack('return', t.id) }),
+          h('button', { className: 'primary', textContent: 'Scan location QR to return', onclick: () => armRack('return', t.id) }),
           loc,
           h('button', {
             textContent: 'Return',
@@ -693,7 +707,7 @@
 
     function typeSelect(value) {
       const s = h('select', { className: 'type' });
-      s.append(h('option', { value: 'Item', textContent: 'Item (stays in the rack)' }),
+      s.append(h('option', { value: 'Item', textContent: 'Item (stays in its place)' }),
                h('option', { value: 'Consumable', textContent: 'Consumable (used up)' }));
       s.value = value === 'Consumable' ? 'Consumable' : 'Item';
       return s;
@@ -807,7 +821,7 @@
     function loadSource(raw, thenPick) {
       say('One moment...');
       return callServer('getLocation', raw).then(r => {
-        if (!r.found) { say('Rack not found: ' + raw.slice(0, 40), false); return; }
+        if (!r.found) { say('Location not found: ' + raw.slice(0, 40), false); return; }
         T.src = r; T.pick = null; T.review = null;
         say('');
         if (thenPick) pickFromSource(thenPick.kind, thenPick.id); else renderTransfer();
@@ -891,8 +905,8 @@
       }
       say('One moment...');
       callServer('getLocation', destRaw).then(r => {
-        if (!r.found) { say('Destination rack not found: ' + destRaw.slice(0, 40), false); return; }
-        if (r.id === T.src.id) { say('That is the same rack the item is already in.', false); return; }
+        if (!r.found) { say('Destination location not found: ' + destRaw.slice(0, 40), false); return; }
+        if (r.id === T.src.id) { say('That is the same place the item is already in.', false); return; }
         T.review = { destId: r.id, destName: r.name, qty: qty };
         say('');
         renderTransfer();
@@ -922,7 +936,7 @@
       const banner = t => b.append(h('div', { className: 'banner', textContent: t }));
 
       if (!T.src) {
-        banner('Step 1 of 3: scan the QR of the rack you are moving FROM. You can also scan an item QR or type the rack name.');
+        banner('Step 1 of 3: scan the QR of the place you are moving FROM (rack, drawer, shelf). You can also scan an item QR or type the name.');
         return;
       }
 
@@ -950,8 +964,8 @@
             h('input', { id: 'tQty', type: 'number', min: '1', max: String(p.max), value: String(p.max), className: 'qty' }));
         }
         b.append(box);
-        banner('Step 3 of 3: scan the QR of the rack you are moving TO, or type its name below.');
-        const dest = locInput('Destination rack name');
+        banner('Step 3 of 3: scan the QR of the place you are moving TO, or type its name below.');
+        const dest = locInput('Destination name');
         b.append(dest,
           h('button', { className: 'primary', textContent: 'Review move', onclick: () => { if (dest.value.trim()) reviewMove(dest.value.trim()); } }),
           h('button', { textContent: 'Pick another item', onclick: () => { T.pick = null; renderTransfer(); } }));
@@ -960,7 +974,7 @@
 
       // Step 2: choose item
       banner('Step 2 of 3: scan the QR of the item, tap it below, or type its name.');
-      if (!T.src.items.length && !T.src.tools.length) b.append(h('p', { className: 'muted', textContent: 'Nothing is stored in this rack.' }));
+      if (!T.src.items.length && !T.src.tools.length) b.append(h('p', { className: 'muted', textContent: 'Nothing is stored here.' }));
       T.src.items.forEach(it => b.append(h('div', { className: 'row' },
         h('span', { className: 'nm', textContent: it.name + ' - Qty ' + it.qty }),
         h('button', { textContent: 'Pick', onclick: () => pickFromSource('item', it.id) }))));
@@ -1065,13 +1079,13 @@
         h('div', { className: 'big-n', textContent: String(tools.length) }),
         h('div', { className: 'muted', textContent: tools.length === 1 ? 'tool in the system' : 'tools in the system' }),
         h('div', { className: 'mini' },
-          h('div', {}, h('b', { textContent: String(tools.length - out.length) }), h('span', { textContent: 'On the rack' })),
+          h('div', {}, h('b', { textContent: String(tools.length - out.length) }), h('span', { textContent: 'Available' })),
           h('div', {}, h('b', { textContent: String(out.length) }), h('span', { textContent: 'With someone' })))));
 
       // Consumable stock donut
       const stockCard = h('div', { className: 'card' }, h('h3', { textContent: 'Consumable stock' }));
       if (!cons.length) {
-        stockCard.append(h('p', { className: 'muted', style: 'margin-top:10px', textContent: 'No consumables yet. Open a rack, press Edit on an item and set its type to Consumable.' }));
+        stockCard.append(h('p', { className: 'muted', style: 'margin-top:10px', textContent: 'No consumables yet. Open a location, press Edit on an item and set its type to Consumable.' }));
       } else {
         const parts = [
           { n: ok, color: 'var(--ink)', label: 'Enough' },
@@ -1108,7 +1122,7 @@
       body.append(tiles);
 
       body.append(h('div', { className: 'facts', style: 'margin-top:16px' },
-        h('div', {}, h('b', { textContent: String(locs.length) }), h('span', { textContent: 'Racks and rooms' })),
+        h('div', {}, h('b', { textContent: String(locs.length) }), h('span', { textContent: 'Locations' })),
         h('div', {}, h('b', { textContent: String(d.items.length) }), h('span', { textContent: 'Items' })),
         h('div', {}, h('b', { textContent: String(tools.length) }), h('span', { textContent: 'Tools' }))));
     }
@@ -1359,7 +1373,8 @@
       const d = h('div', { className: 'label' });
       const q = h('div', { className: 'qr' });
       makeQr(q, link);
-      d.append(h('div', { className: 'tag', textContent: kind }), q,
+      if (kind) d.append(h('div', { className: 'tag', textContent: kind }));
+      d.append(q,
         h('div', { className: 'title', textContent: title }),
         h('div', { className: 'code', textContent: sub }),
         h('div', { className: 'hint', textContent: hint }),
@@ -1380,8 +1395,23 @@
     function makeLabel(id, name) {
       makeLinkLabel(SITE_BASE_URL + 'view.html?id=' + encodeURIComponent(id), 'TOOL', name, id, 'I-scan para hiramin o isauli', id);
     }
+    // Words in a location's name that decide its tag (Drawer 3 -> DRAWER, Rack A -> RACK ...)
+    const LOC_WORDS = [['drawer', 'DRAWER'], ['shelf', 'SHELF'], ['shelves', 'SHELF'], ['rack', 'RACK'], ['cabinet', 'CABINET'],
+                       ['locker', 'LOCKER'], ['bin', 'BIN'], ['box', 'BOX'], ['room', 'ROOM'], ['bodega', 'BODEGA'], ['warehouse', 'WAREHOUSE']];
+    function locTag(name) {
+      const mode = $('locTag').value;
+      if (mode === 'none') return '';
+      if (mode !== 'auto') return mode.toUpperCase();
+      const n = String(name || '').toLowerCase();
+      for (const [word, tag] of LOC_WORDS) {
+        if (new RegExp('(^|[^a-z])' + word).test(n)) return tag;
+      }
+      return 'LOCATION';
+    }
+    function setLocTag() { try { localStorage.setItem('tt_loc_tag', $('locTag').value); } catch (_) {} }
+
     function makeLocLabel(id, name) {
-      makeLinkLabel(SITE_BASE_URL + 'view.html?loc=' + encodeURIComponent(id), 'RACK', name, id, 'I-scan para makita ang laman', id);
+      makeLinkLabel(SITE_BASE_URL + 'view.html?loc=' + encodeURIComponent(id), locTag(name), name, id, 'I-scan para makita ang laman', id);
     }
     function makeItemLabel(id, name, type) {
       const c = type === 'Consumable';
@@ -1470,7 +1500,7 @@
     function pickAllShown() { pickShown().forEach(r => PK.sel.add(r.key)); renderPicker(); }
     function pickClear() { PK.sel.clear(); renderPicker(); }
 
-    // Builds labels for the ticked rows only (racks, then tools, then items).
+    // Builds labels for the ticked rows only (locations, then tools, then items).
     function pickShow() {
       clearLabels();
       const order = { search: 0, rack: 1, tool: 2, item: 3 };
@@ -1755,6 +1785,10 @@
       $('webviewWarn').style.display = 'block';
     }
 
+    try {
+      const lt = localStorage.getItem('tt_loc_tag');
+      if (lt && $('locTag').querySelector('option[value="' + lt + '"]')) $('locTag').value = lt;
+    } catch (_) {}
     try {
       const sz = localStorage.getItem('tt_label_size');
       if (sz && $('labelSize').querySelector('option[value="' + sz + '"]')) { $('labelSize').value = sz; setLabelSize(); }
