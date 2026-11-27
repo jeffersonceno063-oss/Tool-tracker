@@ -41,11 +41,23 @@
     #reader { width: 100%; border-radius: 8px; overflow: hidden; background: #000; min-height: 220px; }
     #reader video { width: 100% !important; border-radius: 8px; display: block; }
     .cam-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-    #labels { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
-    .label { border: 1px dashed #666; padding: 8px; text-align: center; width: 150px; background: #fff; page-break-inside: avoid; }
-    .label .id { font-weight: bold; word-break: break-word; margin-top: 6px; }
-    .label .name { font-size: 13px; margin-top: 4px; word-break: break-word; }
-    @media print { .no-print { display: none !important; } body { margin: 0; max-width: none; padding: 0; } }
+    #labels { display: flex; flex-wrap: wrap; margin-top: 12px; --tt: 12pt; --hh: 7.5pt; }
+    #labels.size-s { --tt: 9pt; --hh: 6pt; }
+    #labels.size-l { --tt: 18pt; --hh: 10pt; }
+    #labels.size-s .label { width: 38mm; }
+    #labels.size-m .label { width: 55mm; }
+    #labels.size-l .label { width: 85mm; }
+    .label { border: 1px dashed #777; margin: 0 -1px -1px 0; padding: 2.5mm; text-align: center; background: #fff; color: #000;
+             display: flex; flex-direction: column; align-items: center; break-inside: avoid; page-break-inside: avoid; }
+    .label .tag { font-size: var(--hh); font-weight: 700; letter-spacing: .1em; border: 1px solid #000; border-radius: 2mm; padding: 0 2.5mm; margin-bottom: 1.5mm; }
+    .label .qr { width: 100%; }
+    .label .qr canvas, .label .qr img { width: 100% !important; height: auto !important; display: block; }
+    .label .title { font-size: var(--tt); font-weight: 700; line-height: 1.15; margin-top: 1.5mm; word-break: break-word; }
+    .label .code { font-size: var(--hh); color: #333; margin-top: .5mm; }
+    .label .hint { font-size: var(--hh); color: #333; margin-top: 1mm; }
+    .size-pick { width: auto; margin: 0 6px 6px 0; padding: 12px; }
+    @page { size: A4; margin: 8mm; }
+    @media print { .no-print { display: none !important; } body { margin: 0; max-width: none; padding: 0; } #labels { display: flex !important; margin: 0; } }
   </style>
 </head>
 <body>
@@ -118,6 +130,28 @@
         <div id="sRes"></div>
         <p id="kmsg" class="msg"></p>
       </section>
+
+      <section>
+        <h3>Usage report</h3>
+        <p class="muted">How many consumables were taken, and how long the stock will last at that pace.</p>
+        <div class="row">
+          <select id="uDays" style="width:auto;margin:0">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+          <button class="primary" onclick="loadUsage()">Show report</button>
+        </div>
+        <div id="uRes"></div>
+      </section>
+
+      <section>
+        <h3>Count a location</h3>
+        <p class="muted">Check the real stock against the Sheet. Differences are fixed and recorded in the Log.</p>
+        <input id="cLoc" list="locs" placeholder="Location to count (e.g. Bodega)" autocomplete="off">
+        <button class="primary" onclick="startCount()">Start count</button>
+        <div id="cBody"></div>
+      </section>
     </div>
 
     <!-- ===== MANAGE TAB ===== -->
@@ -149,14 +183,19 @@
         <button onclick="loadAll()">All tool labels</button>
         <button onclick="loadAllItems()">All item labels</button>
         <button onclick="loadSearchLabel()">Search QR label</button>
-        <button onclick="window.print()">Print labels</button>
+        <select id="labelSize" class="size-pick" onchange="setLabelSize()">
+          <option value="s">Small (3.8 cm)</option>
+          <option value="m" selected>Medium (5.5 cm)</option>
+          <option value="l">Large (8.5 cm)</option>
+        </select>
+        <button class="primary" onclick="window.print()">Print labels</button>
         <button onclick="clearLabels()">Clear labels</button>
         <p id="mmsg" class="msg"></p>
       </section>
     </div>
   </div>
 
-  <div id="labels"></div>
+  <div id="labels" class="size-m"></div>
   <div id="photoReaderHidden" style="display:none"></div>
   <datalist id="locs"></datalist>
   <input id="photo" type="file" accept="image/*" capture="environment" style="display:none">
@@ -464,7 +503,7 @@
         }),
         h('button', {
           textContent: 'Show QR label',
-          onclick: () => { makeItemLabel(it.id, it.name); say('Label added at the bottom of the page. Use Print labels.', true); }
+          onclick: () => { makeItemLabel(it.id, it.name, it.type); say('Label added at the bottom of the page. Use Print labels.', true); }
         }));
       card.append(bar);
       if (it.location) {
@@ -502,7 +541,7 @@
           h('span', { className: 'nm', textContent: it.name + (it.type === 'Consumable' ? ' (consumable)' : '') }),
           ...qtyEditor(it.id, it.qty, saved),
           h('button', { textContent: 'Edit', onclick: edit }),
-          h('button', { textContent: 'Label', onclick: () => { makeItemLabel(it.id, it.name); say('Label added at the bottom of the page.', true); } }),
+          h('button', { textContent: 'Label', onclick: () => { makeItemLabel(it.id, it.name, it.type); say('Label added at the bottom of the page.', true); } }),
           confirmButton('Remove', 'Tap again', () => act('deleteItem', [it.id], saved)));
       };
       const edit = () => {
@@ -850,6 +889,93 @@
     }
     $('sq').addEventListener('input', renderStockTab);
 
+    function loadUsage() {
+      const out = $('uRes');
+      out.textContent = 'Loading...';
+      callServer('getUsageReport', Number($('uDays').value)).then(r => {
+        out.innerHTML = '';
+        if (!r.rows.length) { out.append(h('p', { className: 'muted', textContent: 'No consumables yet.' })); return; }
+        r.rows.forEach(x => {
+          const left = x.daysLeft === null ? 'no use in this period' : 'about ' + x.daysLeft + ' days left';
+          out.append(h('div', { className: 'res' },
+            h('div', { className: 't', textContent: x.name + ' (' + (x.location || 'no location') + ')' }),
+            h('div', { className: 'muted', textContent: 'Taken: ' + x.taken + ' in ' + r.days + ' days (' + x.perWeek + ' per week, ' + x.takes + ' times)' }),
+            h('div', { className: 'muted', textContent: 'Now: ' + x.qty + (x.min ? ' (min ' + x.min + ')' : '') + ' - ' + left })));
+        });
+        if (r.shrink.length) {
+          out.append(h('h4', { textContent: 'Missing at count' }));
+          r.shrink.forEach(x => out.append(h('div', { className: 'low' }, h('strong', { textContent: x.name }), ' - ' + x.lost + ' missing found when counting')));
+        }
+      }).catch(fail);
+    }
+
+    // ----- Count a location -----
+    const C = { loc: null, vals: {} };
+
+    function startCount() {
+      const v = $('cLoc').value.trim();
+      if (!v) { say('Choose a location to count.', false); return; }
+      say('One moment...');
+      callServer('getLocation', v).then(r => {
+        if (!r.found) { say('Location not found.', false); return; }
+        say('');
+        C.loc = r; C.vals = {};
+        renderCount();
+      }).catch(fail);
+    }
+
+    function renderCount() {
+      const b = $('cBody');
+      b.innerHTML = '';
+      const r = C.loc;
+      if (!r) return;
+      b.append(h('h4', { textContent: 'Counting: ' + r.name }));
+      if (!r.items.length) { b.append(h('p', { className: 'muted', textContent: 'No items recorded here.' })); return; }
+      b.append(h('p', { className: 'muted', textContent: 'Type what you actually counted. Leave blank to skip an item.' }));
+      const inputs = {};
+      r.items.forEach(it => {
+        const inp = h('input', { type: 'number', min: '0', placeholder: 'Counted', className: 'qty', value: C.vals[it.id] || '' });
+        inputs[it.id] = inp;
+        b.append(h('div', { className: 'row' }, h('span', { className: 'nm', textContent: it.name + ' (listed: ' + it.qty + ')' }), inp));
+      });
+      b.append(h('button', { className: 'primary', textContent: 'Review', onclick: () => {
+        const pairs = [];
+        for (const it of r.items) {
+          const raw = inputs[it.id].value.trim();
+          C.vals[it.id] = raw;
+          if (raw === '') continue;
+          const n = Number(raw);
+          if (!(n >= 0) || Math.floor(n) !== n) { say(it.name + ': counted must be a whole number, 0 or more.', false); return; }
+          pairs.push([it.id, n]);
+        }
+        reviewCount(pairs);
+      } }), h('button', { textContent: 'Cancel', onclick: () => { C.loc = null; b.innerHTML = ''; say(''); } }));
+    }
+
+    function reviewCount(pairs) {
+      const b = $('cBody');
+      b.innerHTML = '';
+      const byId = {};
+      C.loc.items.forEach(it => { byId[it.id] = it; });
+      const diffs = pairs.filter(p => byId[p[0]].qty !== p[1]);
+      b.append(h('h4', { textContent: 'Review: ' + C.loc.name }));
+      if (!diffs.length) {
+        b.append(h('p', { textContent: 'Everything matches what you counted. No changes needed.' }),
+          h('button', { className: 'primary', textContent: 'Done', onclick: () => { C.loc = null; b.innerHTML = ''; say(''); } }));
+        return;
+      }
+      diffs.forEach(p => {
+        const it = byId[p[0]], d = p[1] - it.qty;
+        b.append(h('div', { className: 'low' }, h('strong', { textContent: it.name }), ': ' + it.qty + ' -> ' + p[1] + ' (' + (d > 0 ? '+' : '') + d + ')'));
+      });
+      b.append(
+        h('button', { className: 'primary', textContent: 'Apply ' + diffs.length + ' change(s)', onclick: () => act('applyCount', [diffs], r => {
+          C.loc = null; b.innerHTML = ''; $('cLoc').value = '';
+          loadStockTab(r.msg);
+        }) }),
+        h('button', { textContent: 'Back', onclick: renderCount }));
+    }
+
     // ----- Manage Lists -----
     function showManage(mode) { manageMode = mode; refreshManage(); }
 
@@ -913,26 +1039,44 @@
         manage.append(h('div', { className: 'row' },
           h('span', { className: 'nm', textContent: it.name + ' (' + it.id + ') - ' + (it.location || 'no location') + ' - Qty ' + it.qty + (it.type === 'Consumable' ? ' - consumable' : '') }),
           h('button', { textContent: 'Open', onclick: () => lookupItem(it.id) }),
-          h('button', { textContent: 'Label', onclick: () => { makeItemLabel(it.id, it.name); say('Label added at the bottom of the page.', true); } })));
+          h('button', { textContent: 'Label', onclick: () => { makeItemLabel(it.id, it.name, it.type); say('Label added at the bottom of the page.', true); } })));
       });
     }
 
     // ----- Printable QR Labels -----
     function makeQr(parent, link) {
-      new QRCode(parent, { text: link, width: 128, height: 128, correctLevel: QRCode.CorrectLevel.L });
+      // Drawn large (256px) and scaled down by CSS, so it stays sharp when printed.
+      new QRCode(parent, { text: link, width: 256, height: 256, correctLevel: QRCode.CorrectLevel.M });
     }
 
-    function makeLinkLabel(link, title, sub) {
+    function makeLinkLabel(link, kind, title, sub, hint) {
       const d = h('div', { className: 'label' });
-      const q = h('div');
+      const q = h('div', { className: 'qr' });
       makeQr(q, link);
-      d.append(q, h('div', { className: 'id', textContent: title }), h('div', { className: 'name', textContent: sub }));
+      d.append(h('div', { className: 'tag', textContent: kind }), q,
+        h('div', { className: 'title', textContent: title }),
+        h('div', { className: 'code', textContent: sub }),
+        h('div', { className: 'hint', textContent: hint }));
       $('labels').appendChild(d);
     }
 
-    function makeLabel(id, name) { makeLinkLabel(SITE_BASE_URL + 'view.html?id=' + encodeURIComponent(id), name, id); }
-    function makeLocLabel(id, name) { makeLinkLabel(SITE_BASE_URL + 'view.html?loc=' + encodeURIComponent(id), name, id); }
-    function makeItemLabel(id, name) { makeLinkLabel(SITE_BASE_URL + 'view.html?item=' + encodeURIComponent(id), name, id); }
+    function setLabelSize() {
+      const v = $('labelSize').value;
+      $('labels').className = 'size-' + v;
+      try { localStorage.setItem('tt_label_size', v); } catch (_) {}
+    }
+
+    function makeLabel(id, name) {
+      makeLinkLabel(SITE_BASE_URL + 'view.html?id=' + encodeURIComponent(id), 'TOOL', name, id, 'I-scan para hiramin o isauli');
+    }
+    function makeLocLabel(id, name) {
+      makeLinkLabel(SITE_BASE_URL + 'view.html?loc=' + encodeURIComponent(id), 'RACK', name, id, 'I-scan para makita ang laman');
+    }
+    function makeItemLabel(id, name, type) {
+      const c = type === 'Consumable';
+      makeLinkLabel(SITE_BASE_URL + 'view.html?item=' + encodeURIComponent(id), c ? 'CONSUMABLE' : 'ITEM', name, id,
+        c ? 'I-scan para kumuha' : 'I-scan para sa detalye');
+    }
 
     function addToolUi() {
       say('One moment...');
@@ -980,13 +1124,13 @@
       clearLabels();
       say('Loading item labels...');
       callServer('getStock').then(d => {
-        d.items.forEach(it => makeItemLabel(it.id, it.name));
+        d.items.forEach(it => makeItemLabel(it.id, it.name, it.type));
         say('Loaded ' + d.items.length + ' item label(s).', true);
       }).catch(fail);
     }
 
     function loadSearchLabel() {
-      makeLinkLabel(SITE_BASE_URL + 'view.html?search=1', 'Search items', 'Scan to find where things are');
+      makeLinkLabel(SITE_BASE_URL + 'view.html?search=1', 'HANAPIN', 'Search', 'Hanapin ang gamit', 'I-scan para hanapin kung nasaan ang gamit');
       say('Search label added at the bottom of the page.', true);
     }
 
@@ -1251,6 +1395,11 @@
     if (/FBAN|FBAV|Instagram|Messenger|Line\/|Viber|wv\)/i.test(navigator.userAgent)) {
       $('webviewWarn').style.display = 'block';
     }
+
+    try {
+      const sz = localStorage.getItem('tt_label_size');
+      if (sz && $('labelSize').querySelector('option[value="' + sz + '"]')) { $('labelSize').value = sz; setLabelSize(); }
+    } catch (_) {}
 
     // Initial tab state (scan tab is shown first)
     document.querySelectorAll('.tabs .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'scan'));
