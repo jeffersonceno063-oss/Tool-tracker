@@ -146,9 +146,12 @@
       .quick button { flex-direction: row; justify-content: center; font-size: 15px; min-height: 64px; }
     }
     @media (min-width: 980px) {
-      body { padding-left: 240px; }
-      .brand { position: fixed; top: 0; left: 0; width: 240px; padding: 22px 20px; margin: 0; max-width: none; z-index: 21; }
-      .tabs { top: 96px; bottom: auto; left: 12px; right: auto; width: 216px; height: auto; max-width: none; flex-direction: column; gap: 4px; padding: 10px; border-radius: 26px; }
+      body { padding-left: 264px; }
+      .brand { position: fixed; top: 0; left: 0; width: 264px; padding: 24px 22px 0; margin: 0; max-width: none; z-index: 21; }
+      .brand .sub { display: none; }
+      .brand .name { font-size: 16px; }
+      .brand .lockbtn { position: fixed; left: 14px; bottom: 18px; width: 236px; justify-content: center; }
+      .tabs { top: 98px; bottom: auto; left: 14px; right: auto; width: 236px; height: auto; max-width: none; flex-direction: column; gap: 4px; padding: 10px; border-radius: 26px; }
       .tab { flex: none; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 13px 16px; font-size: 15px; font-weight: 700; }
       main { max-width: 1120px; padding: 28px 36px 48px; margin: 0; }
       .page h1 { font-size: 34px; }
@@ -158,7 +161,82 @@
       .two > section { margin-bottom: 0; }
       #tab-scan .card-wide, #tab-transfer > section, #tab-search > section { max-width: 760px; }
     }
-    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+    /* ---------- polish: motion, depth, details ---------- */
+    html { scroll-behavior: smooth; }
+    ::selection { background: var(--yellow); color: var(--ink); }
+    body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+    * { scrollbar-width: thin; scrollbar-color: #d8cfba transparent; }
+    @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes pop { 0% { transform: scale(.6); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
+    @keyframes shake { 0%,100% { transform: none; } 20%,60% { transform: translateX(-9px); } 40%,80% { transform: translateX(9px); } }
+    @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+    @keyframes ringIn { from { opacity: 0; transform: rotate(-300deg); } to { opacity: 1; transform: rotate(-90deg); } }
+    @keyframes msgIn { from { opacity: 0; transform: translateY(-6px) scale(.98); } to { opacity: 1; transform: none; } }
+
+    #tab-home, #tab-scan, #tab-transfer, #tab-search, #tab-stock, #tab-manage { animation: rise .42s cubic-bezier(.2,.7,.2,1) both; }
+    .tiles > *, .quick > *, .facts > * { animation: rise .55s cubic-bezier(.2,.7,.2,1) backwards; }
+    .quick > *:nth-child(2), .tiles > *:nth-child(1) { animation-delay: .05s; }
+    .quick > *:nth-child(3), .tiles > *:nth-child(2) { animation-delay: .10s; }
+    .quick > *:nth-child(4), .tiles > *:nth-child(3) { animation-delay: .15s; }
+    .tiles > *:nth-child(4) { animation-delay: .20s; }
+    .tiles > *:nth-child(5) { animation-delay: .25s; }
+    .facts > *:nth-child(2) { animation-delay: .1s; } .facts > *:nth-child(3) { animation-delay: .2s; }
+    .res, .item-row { animation: fadeIn .35s both; }
+    .donut g { transform-box: view-box; transform-origin: 50% 50%; animation: ringIn 1s cubic-bezier(.2,.8,.2,1) both; }
+
+    button, .tab, .card, section, .quick button, .res, input, select, textarea { transition: background-color .18s, color .18s, box-shadow .22s, transform .18s cubic-bezier(.2,.7,.2,1), border-color .18s; }
+    @media (hover: hover) {
+      button:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(23,22,15,.12); }
+      button:not(:disabled):active { transform: translateY(0) scale(.97); box-shadow: none; }
+      .quick button:hover { box-shadow: 0 10px 26px rgba(23,22,15,.14); transform: translateY(-3px); }
+      .tiles > .card:hover { transform: translateY(-3px); box-shadow: 0 2px 4px rgba(23,22,15,.05), 0 18px 38px rgba(23,22,15,.12); }
+      .tab:not(.active):hover { background: var(--soft); color: var(--ink); }
+      .res:hover { background: rgba(247,212,76,.12); }
+      .night .item-row:hover { background: rgba(255,255,255,.04); }
+    }
+    .tab.active .ic { animation: pop .38s ease-out; }
+    .tabs { background: rgba(255,253,248,.92); backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px); }
+    .tab { position: relative; }
+    .tab.active { box-shadow: 0 6px 16px rgba(23,22,15,.28); }
+    @media (min-width: 980px) { .tab.active { transform: translateX(4px); } }
+
+    .brand .name, .brand .sub { overflow: hidden; text-overflow: ellipsis; }
+    .brand > div:nth-child(2) { min-width: 0; }
+    .brand .lockbtn { display: inline-flex; align-items: center; gap: 6px; flex: none; white-space: nowrap; background: var(--paper); box-shadow: 0 0 0 1px var(--line); }
+    .brand .lockbtn .ic { width: 16px; height: 16px; }
+    @media (max-width: 979px) { .brand .name { white-space: nowrap; } .brand .sub { white-space: nowrap; } }
+
+    .page h1 { background: linear-gradient(100deg, var(--ink) 55%, #5a4f1f); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .page p { font-size: 15px; }
+    section > h3::after { content: ''; display: block; width: 28px; height: 3px; border-radius: 3px; background: var(--yellow); margin-top: 6px; }
+    section > h3 { margin-bottom: 10px; }
+    select { appearance: none; -webkit-appearance: none; padding-right: 38px; cursor: pointer;
+             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2317160f' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+             background-repeat: no-repeat; background-position: right 14px center; }
+
+    .msg { display: block; border-radius: 14px; padding: 11px 14px; background: var(--soft); animation: msgIn .28s cubic-bezier(.2,.7,.2,1) both; }
+    .msg.ok { background: var(--ok-bg); color: var(--ok); }
+    .msg.bad { background: var(--bad-bg); color: var(--bad); }
+    .msg:empty { display: none; }
+
+    .sk { border-radius: 22px; min-height: 120px; background: linear-gradient(100deg, #ece5d4 30%, #f8f3e8 50%, #ece5d4 70%); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+    .sk-grid { display: grid; gap: 16px; }
+    @media (min-width: 700px) { .sk-grid { grid-template-columns: 1fr 1fr; } }
+
+    .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 10px; background: var(--muted); flex: none; }
+    .dot.out { background: var(--yellow); box-shadow: 0 0 0 3px var(--yellow-soft); } .dot.in { background: var(--ok); } .dot.take { background: var(--ink); } .dot.add { background: #3b7dd8; } .dot.bad { background: var(--bad); }
+    .tiles > .recent { grid-column: 1 / -1; }
+    .recent .res.row .nm { display: flex; align-items: center; min-width: 0; }
+    .recent .res.row .nm > span { min-width: 0; word-break: break-word; }
+
+    #lock .box { animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
+    #lock .box.shake { animation: shake .42s; }
+    #lock .mark { animation: pop .6s .15s both; }
+    .brand .mark { background: linear-gradient(145deg, #2a281e, var(--ink)); box-shadow: 0 4px 12px rgba(23,22,15,.25); }
+
 
     /* ---------- printing: only the labels ---------- */
     #labels { display: flex; flex-wrap: wrap; margin-top: 12px; --tt: 12pt; --hh: 7.5pt; }
@@ -213,6 +291,7 @@
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
     <symbol id="i-box" viewBox="0 0 24 24"><path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5zM3.5 7.5 12 12l8.5-4.5M12 12v9"/></symbol>
     <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M19 7h1M4 17h1M11 17h9"/><circle cx="16" cy="7" r="2.2"/><circle cx="8" cy="17" r="2.2"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
     <symbol id="i-count" viewBox="0 0 24 24"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1zM8 6H6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-2M9 13l2 2 4-4"/></symbol>
   </svg>
 
@@ -220,7 +299,7 @@
     <header class="brand">
       <div class="mark" aria-hidden="true">SGF</div>
       <div><div class="name">SGF Inventory System</div><div class="sub">Tools, items and supplies</div></div>
-      <button class="lockbtn" id="lockBtn" onclick="lockApp()" title="Lock the app on this device">Lock</button>
+      <button class="lockbtn" id="lockBtn" onclick="lockApp()" title="Lock the app on this device"><svg class="ic"><use href="#i-lock"/></svg>Lock</button>
     </header>
 
     <nav class="tabs" aria-label="Main">
@@ -251,7 +330,7 @@
           <button onclick="showTab('stock'); $('cLoc').focus()"><svg class="ic"><use href="#i-count"/></svg>Count</button>
         </div>
         <p id="hmsg" class="msg"></p>
-        <div id="homeBody"><p class="muted">Loading your numbers...</p></div>
+        <div id="homeBody"><div class="sk-grid"><div class="sk"></div><div class="sk"></div><div class="sk" style="min-height:90px"></div><div class="sk" style="min-height:90px"></div></div></div>
       </div>
 
       <!-- ===== SCAN ===== -->
@@ -444,7 +523,9 @@
     function say(text, ok) {
       const m = $(MSG_ID[activeTab]);
       m.textContent = text || '';
-      m.style.color = ok === undefined ? 'var(--ink)' : (ok ? 'var(--ok)' : 'var(--bad)');
+      m.style.color = '';
+      m.className = 'msg' + (ok === undefined ? '' : (ok ? ' ok' : ' bad'));
+      if (text) { void m.offsetWidth; }
     }
 
     function fail(err) {
@@ -564,6 +645,7 @@
         $('lockGo').disabled = false;
         $('lockPin').value = '';
         $('lockErr').textContent = err.code ? LOCK_TEXT[err.code] : 'Hindi maabot ang server. Check ang internet at subukan ulit.';
+        const bx = document.querySelector('#lock .box'); bx.classList.remove('shake'); void bx.offsetWidth; bx.classList.add('shake');
       }
       return false;
     }
@@ -1157,6 +1239,28 @@
         '<text x="74" y="96" text-anchor="middle" class="center-l">consumables</text></svg>';
     }
 
+    // Numbers count up from 0 when the dashboard appears.
+    function countUp(root) {
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      root.querySelectorAll('.big-n, .mini b, .facts b, .donut .center-n').forEach(el => {
+        const end = parseInt(el.textContent, 10);
+        if (!isFinite(end) || end < 1 || end > 100000) return;
+        const t0 = performance.now(), dur = 700;
+        const tick = now => {
+          const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+          el.textContent = String(Math.round(end * e));
+          if (k < 1) requestAnimationFrame(tick); else el.textContent = String(end);
+        };
+        el.textContent = '0';
+        requestAnimationFrame(tick);
+      });
+    }
+
+    function actDot(a) {
+      const k = a === 'OUT' ? 'out' : a === 'IN' ? 'in' : a === 'TAKE' ? 'take' : /RESTOCK|LOCATION/.test(a) ? 'add' : /DELETED|UNDO/.test(a) ? 'bad' : '';
+      return h('i', { className: 'dot ' + k });
+    }
+
     function daysText(iso) {
       if (!iso) return '';
       const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
@@ -1233,7 +1337,7 @@
       const rc = h('div', { className: 'card span2 recent' }, h('h3', { textContent: 'Recent activity' }));
       if (!recent || !recent.length) rc.append(h('p', { className: 'muted', style: 'margin:10px 0 0', textContent: 'Nothing yet.' }));
       (recent || []).slice(0, 8).forEach(r => rc.append(h('div', { className: 'res row' },
-        h('div', { className: 'nm', textContent: activityLine(r) }),
+        h('div', { className: 'nm' }, actDot(r.action), h('span', { textContent: activityLine(r) })),
         h('span', { className: 'when', textContent: r.time ? new Date(r.time).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '' }))));
       tiles.append(rc);
       body.append(tiles);
@@ -1242,6 +1346,7 @@
         h('div', {}, h('b', { textContent: String(locs.length) }), h('span', { textContent: 'Locations' })),
         h('div', {}, h('b', { textContent: String(d.items.length) }), h('span', { textContent: 'Items' })),
         h('div', {}, h('b', { textContent: String(tools.length) }), h('span', { textContent: 'Tools' }))));
+      countUp(body);
     }
 
     // ----- Stock tab (consumables) -----
