@@ -58,6 +58,10 @@
     .err { background: var(--bad-bg); color: var(--bad); font-weight: 700; margin: 12px 0; padding: 13px 16px; border-radius: 16px; font-size: 17px; }
     .foot { margin-top: 18px; text-align: center; color: var(--muted); font-size: 16px; }
     a.loc { color: var(--ink); font-weight: 700; text-decoration-color: var(--yellow); text-decoration-thickness: 3px; text-underline-offset: 3px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+    .chips button.chip { width: auto; min-width: 0; min-height: 52px; margin: 0; padding: 10px 18px; font-size: 18px; font-weight: 700; }
+    .chips button.chip.sel { background: var(--ink); color: #fff; }
+    .chips button.chip.more { background: transparent; border: 1.5px dashed var(--line); font-weight: 600; }
     a.btn { display: block; text-align: center; text-decoration: none; background: var(--soft); color: var(--ink); padding: 16px; border-radius: 999px; font-weight: 700; margin: 8px 0; }
 
     @media (min-width: 700px) {
@@ -91,14 +95,29 @@
       return el;
     }
 
+    // A write carries a request id. If the signal drops and the person taps again, the same id
+    // is sent, so the server does it only once (no double borrow, no double take).
+    const WRITE_FNS = new Set(['borrowTool', 'returnTool', 'takeConsumable', 'undoTake', 'undoBorrow', 'undoReturn', 'reportProblem']);
+    const pendingRid = {};
+    function newRid() {
+      const a = new Uint8Array(12);
+      if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(a);
+      else a.forEach((_, i) => a[i] = Math.floor(Math.random() * 256));
+      return 'r' + Array.from(a, x => x.toString(16).padStart(2, '0')).join('');
+    }
+
     async function callServer(fn, ...args) {
+      const key = fn + '|' + JSON.stringify(args);
+      const body = { fn, args };
+      if (WRITE_FNS.has(fn)) body.rid = pendingRid[key] || (pendingRid[key] = newRid());
       const res = await fetch(GAS_URL, {
         method: 'POST',
         redirect: 'follow',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ fn, args })
+        body: JSON.stringify(body)
       });
       const data = await res.json();
+      delete pendingRid[key];
       if (!data.ok && data.rpcError) throw new Error(data.rpcError);
       return data.result;
     }
@@ -118,7 +137,8 @@
       [/^Quantity must be/i, 'Ang dami ay dapat buong numero, 1 pataas.'],
       [/^Only 0 /i, 'Ubos na ang stock nito.'],
       [/^Only (\d+) /i, m => 'Ang natitira na lang ay ' + m[1] + '. Bawasan ang kukunin.'],
-      [/^Cannot undo/i, 'Hindi na ma-undo ito.'],
+      [/^Cannot undo|Hindi na ito maaaring/i, 'Hindi na ito ma-undo. Sabihin sa admin.'],
+      [/maraming report/i, 'Maraming report ngayon. Subukan ulit mamaya.'],
       [/^Write the problem/i, 'Isulat muna kung ano ang problema.'],
       [/lock/i, 'Maraming gumagamit ngayon. Subukan ulit.'],
       [/Failed to fetch|NetworkError|Load failed|network/i, 'Walang internet o mahina ang signal. Subukan ulit.']
@@ -165,6 +185,57 @@
       }
     }
 
+    // ----- Names: tap your name instead of typing it -----
+    let staffP = null;
+    function staffNames() {
+      if (!staffP) staffP = callServer('getStaff').then(r => (r && r.names) || []).catch(() => []);
+      return staffP;
+    }
+
+    // names empty -> a plain text box. Otherwise name buttons plus "Iba pa..." for visitors.
+    function namePicker(names, placeholder) {
+      const remembered = store.get('tt_name');
+      const wrap = h('div');
+      if (!names.length) {
+        const input = h('input', { placeholder: placeholder, value: remembered, autocomplete: 'name' });
+        wrap.append(input);
+        return { el: wrap, value: () => input.value.trim() };
+      }
+      let picked = names.find(n => n.toLowerCase() === remembered.toLowerCase()) || '';
+      let guest = false;
+      const chips = h('div', { className: 'chips' });
+      const guestIn = h('input', { placeholder: 'Isulat ang pangalan mo', autocomplete: 'off', style: 'display:none' });
+      const draw = () => {
+        chips.innerHTML = '';
+        names.forEach(n => chips.append(h('button', {
+          type: 'button', className: 'chip' + (!guest && picked === n ? ' sel' : ''), textContent: n,
+          onclick: () => { picked = n; guest = false; guestIn.style.display = 'none'; draw(); }
+        })));
+        chips.append(h('button', {
+          type: 'button', className: 'chip more' + (guest ? ' sel' : ''), textContent: 'Iba pa...',
+          onclick: () => { guest = true; picked = ''; guestIn.style.display = 'block'; draw(); guestIn.focus(); }
+        }));
+      };
+      draw();
+      wrap.append(chips, guestIn);
+      return { el: wrap, value: () => guest ? guestIn.value.trim() : picked };
+    }
+
+    function ago(min) {
+      if (min === null || min === undefined) return '';
+      if (min < 2) return 'ngayon lang';
+      if (min < 60) return min + ' minuto na';
+      const hr = Math.floor(min / 60);
+      if (hr < 24) return hr + ' oras na';
+      const d = Math.floor(hr / 24);
+      return d + (d === 1 ? ' araw na' : ' araw na');
+    }
+
+    function sameName(a, b) {
+      const clean = x => String(x || '').replace(/^bisita:\s*/i, '').trim().toLowerCase();
+      return !!clean(a) && clean(a) === clean(b);
+    }
+
     // Green "done" screen. undo = { label, fn } runs once, then back() reloads the page content.
     function doneScreen(title, detail, undo, back) {
       box.innerHTML = '';
@@ -197,7 +268,7 @@
 
     // ----- Tool: Hiram / Isauli -----
     async function showTool(id, msg) {
-      const t = await callServer('getTool', id);
+      const [t, names] = await Promise.all([callServer('getTool', id), staffNames()]);
       box.innerHTML = '';
       if (!t.found) { box.textContent = 'Hindi nahanap ang tool na ito.'; return; }
       about = 'Tool: ' + t.name + ' (' + t.id + ')';
@@ -212,11 +283,11 @@
       if (t.status !== 'Borrowed') {
         box.append(h('span', { className: 'badge ok', textContent: 'Available' }),
           h('p', {}, 'Nasa: ', locLink(t.location, t.locationId)));
-        const nameIn = h('input', { placeholder: 'Pangalan mo', value: store.get('tt_name'), autocomplete: 'name' });
-        box.append(h('div', { className: 'muted', textContent: 'Sino ang hihiram?' }), nameIn);
+        const picker = namePicker(names, 'Pangalan mo');
+        box.append(h('div', { className: 'muted', textContent: 'Sino ang hihiram?' }), picker.el);
         const go = button('Hiramin', 'main', function () {
-          const who = nameIn.value.trim();
-          if (!who) { errorLine('Ilagay muna ang pangalan mo.'); return; }
+          const who = picker.value();
+          if (!who) { errorLine('Piliin o ilagay muna ang pangalan mo.'); return; }
           run(this, 'borrowTool', [t.id, who], () => {
             store.set('tt_name', who);
             doneScreen('Hiniram mo na ang ' + t.name, 'Ibalik sa ' + t.location + ' pagkatapos gamitin.',
@@ -225,11 +296,12 @@
         });
         box.append(go);
       } else {
-        box.append(h('span', { className: 'badge out', textContent: 'Hawak ni ' + t.borrower }));
+        box.append(h('span', { className: 'badge out', textContent: 'Hawak ni ' + t.borrower }),
+          h('div', { className: 'muted', textContent: t.ageMin !== null && t.ageMin !== undefined ? 'Kinuha ' + ago(t.ageMin) : '' }));
         const giveBack = (loc, locName) => function () {
           run(this, 'returnTool', [t.id, loc], () => {
             doneScreen('Naibalik na ang ' + t.name, 'Nasa ' + locName + ' na ito.',
-              () => callServer('undoReturn', t.id, t.borrower, t.location), m => showTool(id, m));
+              () => callServer('undoReturn', t.id, t.borrower, t.location, t.since), m => showTool(id, m));
           });
         };
         box.append(button('Isauli sa ' + t.location, 'main', giveBack(t.locationId || t.location, t.location)));
@@ -243,31 +315,55 @@
           } catch (e) { errorLine(tl(e.message || e)); this.disabled = false; }
         });
         box.append(other);
+        // Just borrowed this by mistake? The same person can cancel it for a few minutes.
+        if (t.ageMin !== null && t.ageMin !== undefined && t.ageMin <= 10 && sameName(store.get('tt_name'), t.borrower)) {
+          box.append(button('Mali ang pagkuha? Kanselahin', 'small', async function () {
+            this.disabled = true;
+            try {
+              const r = await callServer('undoBorrow', t.id);
+              if (!r.ok) { errorLine(tl(r.msg)); this.disabled = false; return; }
+              showTool(id, 'Na-cancel na ang paghiram.');
+            } catch (e) { errorLine(tl(e.message || e)); this.disabled = false; }
+          }));
+        }
       }
       note(msg);
     }
 
     // ----- Consumable: Kumuha -----
-    function takePanel(it, back) {
+    function takePanel(it, back, names) {
+      names = names || [];
       box.innerHTML = '';
       box.append(h('h2', { textContent: it.name }), h('div', { className: 'muted', textContent: 'Natitira: ' + it.qty }));
       let n = 1;
       const qty = h('input', { type: 'number', min: '1', max: String(it.qty), value: '1', inputMode: 'numeric' });
       qty.addEventListener('input', () => { n = parseInt(qty.value, 10) || 0; });
-      const bump = d => { n = Math.min(it.qty, Math.max(1, (parseInt(qty.value, 10) || 0) + d)); qty.value = String(n); };
+      const bump = d => { n = Math.min(it.qty, Math.max(1, (parseInt(qty.value, 10) || 0) + d)); qty.value = String(n); qty.dispatchEvent(new Event('input')); };
       box.append(h('h3', { textContent: 'Ilan ang kukunin?' }),
         h('div', { className: 'stepper' }, button('-', '', () => bump(-1)), qty, button('+', '', () => bump(1))));
-      const who = h('input', { placeholder: 'Pangalan mo (hindi kailangan)', value: store.get('tt_name'), autocomplete: 'name' });
-      box.append(who);
-      box.append(button('Kunin', 'main', function () {
+      const who = namePicker(names, 'Pangalan mo (hindi kailangan)');
+      box.append(who.el);
+      let armedTimer = null;
+      const takeBtn = button('Kunin', 'main', function () {
         const q = parseInt(qty.value, 10);
         if (!(q >= 1) || q > it.qty) { errorLine('Ang dami ay 1 hanggang ' + it.qty + '.'); return; }
-        run(this, 'takeConsumable', [it.id, q, who.value.trim()], r => {
-          if (who.value.trim()) store.set('tt_name', who.value.trim());
+        // A big grab (10 or more, and over half of what is left) needs a second tap, so a slip of the finger does no harm.
+        if (q >= 10 && q * 2 > it.qty && !this.dataset.armed) {
+          this.dataset.armed = '1';
+          this.textContent = 'Sigurado? Kukunin ang ' + q + ' sa ' + it.qty + '. Pindutin ulit.';
+          clearTimeout(armedTimer);
+          armedTimer = setTimeout(() => { this.dataset.armed = ''; this.textContent = 'Kunin'; }, 6000);
+          return;
+        }
+        const name = who.value();
+        run(this, 'takeConsumable', [it.id, q, name], r => {
+          if (name) store.set('tt_name', name);
           doneScreen('Kinuha mo ang ' + q + ' ' + it.name, 'Natitira: ' + r.qty + (r.low ? ' (paubos na)' : ''),
             () => callServer('undoTake', it.id, q), m => back(m));
         });
-      }));
+      });
+      qty.addEventListener('input', () => { takeBtn.dataset.armed = ''; takeBtn.textContent = 'Kunin'; });
+      box.append(takeBtn);
       box.append(button('Bumalik', 'small', () => back()));
     }
 
@@ -278,7 +374,7 @@
 
     // ----- Location (rack / bodega) -----
     async function showLocation(raw, msg) {
-      const r = await callServer('getLocation', raw);
+      const [r, names] = await Promise.all([callServer('getLocation', raw), staffNames()]);
       box.innerHTML = '';
       if (!r.found) { box.textContent = 'Hindi nahanap ang lokasyon.'; return; }
       about = 'Lokasyon: ' + r.name + ' (' + r.id + ')';
@@ -290,7 +386,7 @@
         const row = h('div', { className: 'item' },
           h('div', { className: 'nm' }, it.name, h('div', { className: 'muted', textContent: 'Dami: ' + it.qty }), itemBadge(it)));
         if (it.type === 'Consumable') {
-          row.append(button('Kumuha', 'main', () => takePanel(it, m => showLocation(raw, m))));
+          row.append(button('Kumuha', 'main', () => takePanel(it, m => showLocation(raw, m), names)));
         }
         box.append(row);
       });
@@ -309,14 +405,14 @@
 
     // ----- Single item QR -----
     async function showItem(id, msg) {
-      const it = await callServer('getItem', id);
+      const [it, names] = await Promise.all([callServer('getItem', id), staffNames()]);
       box.innerHTML = '';
       if (!it.found) { box.textContent = 'Hindi nahanap ang item na ito.'; return; }
       about = 'Item: ' + it.name + ' (' + it.id + ')';
       box.append(h('h2', { textContent: it.name }), h('div', { className: 'muted', textContent: it.id }),
         h('p', { textContent: 'Dami: ' + it.qty }), itemBadge(it),
         h('p', {}, 'Nasa: ', locLink(it.location, it.locationId)));
-      if (it.type === 'Consumable') box.append(button('Kumuha', 'main', () => takePanel(it, m => showItem(id, m))));
+      if (it.type === 'Consumable') box.append(button('Kumuha', 'main', () => takePanel(it, m => showItem(id, m), names)));
       note(msg);
     }
 
@@ -362,17 +458,19 @@
       f.append(h('div', { textContent: CONTACT ? 'O tawagan si ' + CONTACT : '' }));
     }
 
-    function openReport() {
+    async function openReport() {
+      const names = await staffNames();
       box.innerHTML = '';
       box.append(h('h2', { textContent: 'Ipaalam sa admin' }),
         h('div', { className: 'muted', textContent: about ? 'Tungkol sa: ' + about : '' }));
       const msg = h('textarea', { placeholder: 'Ano ang problema? (halimbawa: sira ang tool, mali ang dami, may nawawala)', maxLength: 500 });
-      const who = h('input', { placeholder: 'Pangalan mo', value: store.get('tt_name'), autocomplete: 'name' });
-      box.append(msg, who);
+      const who = namePicker(names, 'Pangalan mo');
+      box.append(msg, who.el);
       box.append(button('Ipadala', 'main', function () {
         if (!msg.value.trim()) { errorLine('Isulat muna kung ano ang problema.'); return; }
-        run(this, 'reportProblem', [msg.value.trim(), who.value.trim(), about], () => {
-          if (who.value.trim()) store.set('tt_name', who.value.trim());
+        const name = who.value();
+        run(this, 'reportProblem', [msg.value.trim(), name, about], () => {
+          if (name) store.set('tt_name', name);
           box.innerHTML = '';
           box.append(h('div', { className: 'done' },
             h('div', { className: 'tick', textContent: '\u2714' }),
