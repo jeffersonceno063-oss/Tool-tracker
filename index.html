@@ -176,11 +176,36 @@
     .label .code { font-size: var(--hh); color: #333; margin-top: .5mm; }
     .label .hint { font-size: var(--hh); color: #333; margin-top: 1mm; }
     .label .xbtn { width: 100%; margin: 2mm 0 0; padding: 6px 8px; font-size: 13px; background: #fdecea; border-color: #f5c2c0; color: #8c1d18; }
+    /* ---------- lock screen ---------- */
+    body.locked .app { display: none; }
+    #lock { display: none; position: fixed; inset: 0; z-index: 100; background: var(--bg); align-items: center; justify-content: center; padding: 20px; }
+    body.locked #lock { display: flex; }
+    #lock .box { width: 100%; max-width: 380px; background: var(--paper); border-radius: var(--r-card); padding: 28px 24px; box-shadow: var(--shadow); text-align: center; }
+    #lock .mark { margin: 0 auto 14px; width: 56px; height: 56px; font-size: 17px; border-radius: 18px; }
+    #lock h1 { font-size: 22px; margin: 0 0 4px; }
+    #lock p { margin: 0 0 16px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+    #lock input { text-align: center; font-size: 22px; letter-spacing: .25em; }
+    #lock button { width: 100%; margin: 0; }
+    #lock .err { color: var(--bad); font-weight: 700; font-size: 14px; margin: 0 0 12px; line-height: 1.45; }
+    #lock .err:empty { display: none; }
+    .brand .lockbtn { margin: 0 0 0 auto; padding: 9px 14px; min-height: 0; font-size: 13px; }
+    .recent .when { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .late { color: var(--bad); font-weight: 700; }
     @page { size: A4; margin: 8mm; }
     @media print { .no-print { display: none !important; } body { margin: 0; padding: 0; background: #fff; } #labels { display: flex !important; margin: 0; } }
   </style>
 </head>
-<body>
+<body class="locked">
+  <div id="lock" role="dialog" aria-labelledby="lockTitle">
+    <form class="box" onsubmit="return tryUnlock(event)">
+      <div class="mark" aria-hidden="true">SGF</div>
+      <h1 id="lockTitle">SGF Inventory System</h1>
+      <p>Admin lang po ito. Ilagay ang PIN.</p>
+      <p id="lockErr" class="err" role="alert"></p>
+      <input id="lockPin" type="password" autocomplete="current-password" placeholder="PIN" aria-label="Admin PIN">
+      <button class="primary" id="lockGo" type="submit">Buksan</button>
+    </form>
+  </div>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <symbol id="i-home" viewBox="0 0 24 24"><path d="M3.5 11 12 4l8.5 7v8.5a1 1 0 0 1-1 1H15v-6H9v6H4.5a1 1 0 0 1-1-1z"/></symbol>
     <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M4 12h16"/></symbol>
@@ -195,6 +220,7 @@
     <header class="brand">
       <div class="mark" aria-hidden="true">SGF</div>
       <div><div class="name">SGF Inventory System</div><div class="sub">Tools, items and supplies</div></div>
+      <button class="lockbtn" id="lockBtn" onclick="lockApp()" title="Lock the app on this device">Lock</button>
     </header>
 
     <nav class="tabs" aria-label="Main">
@@ -327,6 +353,7 @@
               <button onclick="showManage('locations')">Locations</button>
               <button onclick="showManage('tools')">Tools</button>
               <button onclick="showManage('items')">Items</button>
+              <button onclick="showManage('staff')">Staff</button>
               <button onclick="showManage('reports')">Reports</button>
               <div id="manage"></div>
             </section>
@@ -454,24 +481,91 @@
       return GAS_URL && /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/i.test(GAS_URL);
     }
 
-    async function callServer(fn, ...args) {
+    // ----- Admin PIN -----
+    // The PIN is checked by the server on every admin request. It is kept on this device only.
+    let PIN = '';
+    try { PIN = localStorage.getItem('sgf_pin') || ''; } catch (_) {}
+    const WRITE_FNS = new Set(['borrowTool', 'returnTool', 'takeConsumable', 'undoTake', 'undoBorrow', 'undoReturn', 'reportProblem',
+      'addTool', 'addItem', 'restock', 'moveItem', 'moveTool', 'setLocation', 'applyCount', 'addStaff', 'addLocation']);
+    const pendingRid = {};   // same tap retried after a network failure -> same request id -> server does it once
+
+    function newRid() {
+      const a = new Uint8Array(12);
+      (window.crypto || {}).getRandomValues ? crypto.getRandomValues(a) : a.forEach((_, i) => a[i] = Math.floor(Math.random() * 256));
+      return 'r' + Array.from(a, x => x.toString(16).padStart(2, '0')).join('');
+    }
+
+    const LOCK_TEXT = {
+      AUTH: 'Mali ang PIN. Subukan ulit.',
+      LOCKED: 'Masyadong maraming maling subok. Maghintay ng 10 minuto, tapos subukan ulit.',
+      NOPIN: 'Wala pang PIN na naka-set. Sa Apps Script: Project Settings > Script properties > Add script property > pangalan ADMIN_PIN, at ang PIN mo ang value. Tapos i-refresh ito.'
+    };
+
+    function showLock(msg) {
+      stopCamera();
+      document.body.classList.add('locked');
+      $('lockErr').textContent = msg || '';
+      $('lockPin').value = '';
+      $('lockGo').disabled = false;
+      if (!isTouch || !msg) setTimeout(() => $('lockPin').focus(), 50);
+    }
+
+    function lockApp() {
+      PIN = '';
+      try { localStorage.removeItem('sgf_pin'); } catch (_) {}
+      showLock('');
+    }
+
+    async function rpc(fn, args, quiet) {
       if (!isConfigured()) {
         throw new Error('Set your Google Apps Script /exec URL in config.js first.');
       }
+      const key = fn + '|' + JSON.stringify(args);
+      const body = { fn: fn, args: args, pin: PIN };
+      if (WRITE_FNS.has(fn)) body.rid = pendingRid[key] || (pendingRid[key] = newRid());
       const response = await fetch(GAS_URL, {
         method: 'POST',
         redirect: 'follow',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ fn: fn, args: args })
+        body: JSON.stringify(body)
       });
       if (!response.ok) {
         throw new Error('Server HTTP ' + response.status);
       }
       const data = await response.json();
+      delete pendingRid[key];          // the server answered, so a new tap is a new request
       if (!data.ok && data.rpcError) {
-        throw new Error(data.rpcError);
+        const err = new Error(LOCK_TEXT[data.code] || data.rpcError);
+        err.code = data.code || '';
+        if (err.code && !quiet) {
+          if (err.code === 'AUTH') { PIN = ''; try { localStorage.removeItem('sgf_pin'); } catch (_) {} }
+          showLock(LOCK_TEXT[err.code]);
+        }
+        throw err;
       }
       return data.result;
+    }
+
+    function callServer(fn, ...args) { return rpc(fn, args, false); }
+
+    async function tryUnlock(ev) {
+      if (ev) ev.preventDefault();
+      const pin = $('lockPin').value;
+      if (!pin) return false;
+      $('lockGo').disabled = true;
+      $('lockErr').textContent = '';
+      PIN = pin;
+      try {
+        await rpc('checkPin', [], true);
+        try { localStorage.setItem('sgf_pin', pin); } catch (_) {}
+        startApp();
+      } catch (err) {
+        PIN = '';
+        $('lockGo').disabled = false;
+        $('lockPin').value = '';
+        $('lockErr').textContent = err.code ? LOCK_TEXT[err.code] : 'Hindi maabot ang server. Check ang internet at subukan ulit.';
+      }
+      return false;
     }
 
     function confirmButton(label, armedLabel, action) {
@@ -1033,11 +1127,11 @@
         body.append(h('p', { className: 'muted', textContent: 'Set your Google Apps Script /exec URL in config.js first.' }));
         return;
       }
-      Promise.all([callServer('getStock'), callServer('listLocations'), callServer('listReports')]).then(([d, locs, reps]) => {
-        stockCache = { t: Date.now(), data: d };
-        showReportBanner(reps);
+      callServer('getHome').then(hm => {
+        stockCache = { t: Date.now(), data: hm.stock };
+        showReportBanner(hm.reports);
         say('');
-        renderHome(d, locs);
+        renderHome(hm.stock, hm.locations, hm.recent || []);
       }).catch(err => {
         body.innerHTML = '';
         body.append(h('p', { className: 'muted', textContent: 'Could not load the numbers. Check your connection and try again.' }),
@@ -1063,7 +1157,22 @@
         '<text x="74" y="96" text-anchor="middle" class="center-l">consumables</text></svg>';
     }
 
-    function renderHome(d, locs) {
+    function daysText(iso) {
+      if (!iso) return '';
+      const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+      return d <= 0 ? 'today' : d === 1 ? '1 day' : d + ' days';
+    }
+
+    const ACT_WORDS = { OUT: 'borrowed', IN: 'returned', TAKE: 'took', 'UNDO TAKE': 'undid a take of', 'UNDO OUT': 'undid borrowing', 'UNDO IN': 'undid returning', RESTOCK: 'restocked', LOCATION: 'set the place of', DELETED: 'deleted' };
+
+    function activityLine(r) {
+      const a = r.action;
+      const what = a.indexOf('MOVE') === 0 ? 'moved' : a.indexOf('COUNT') === 0 ? 'counted (' + a.slice(6) + ')' : (ACT_WORDS[a] || a.toLowerCase());
+      const who = r.person || 'Admin';
+      return who + ' ' + what + ' ' + r.name + (r.location ? ' - ' + r.location : '');
+    }
+
+    function renderHome(d, locs, recent) {
       const body = $('homeBody');
       body.innerHTML = '';
       const tools = d.tools, out = tools.filter(t => t.status === 'Borrowed');
@@ -1116,9 +1225,17 @@
       const people = h('div', { className: 'card span2' }, h('h3', { textContent: 'Tools with people' }));
       if (!out.length) people.append(h('p', { className: 'muted', style: 'margin:10px 0 0', textContent: 'Nothing is borrowed right now.' }));
       out.forEach(t => people.append(h('div', { className: 'res row' },
-        h('div', { className: 'nm' }, h('div', { className: 't', textContent: t.name }), h('div', { className: 'muted', textContent: 'with ' + t.borrower + ' - belongs in ' + (t.location || 'no rack') })),
+        h('div', { className: 'nm' }, h('div', { className: 't', textContent: t.name }), h('div', { className: 'muted', textContent: 'with ' + t.borrower + (t.since ? ' for ' + daysText(t.since) : '') + ' - belongs in ' + (t.location || 'no rack') })),
         h('button', { textContent: 'Open', onclick: () => lookup(t.id) }))));
       tiles.append(people);
+
+      // Recent activity
+      const rc = h('div', { className: 'card span2 recent' }, h('h3', { textContent: 'Recent activity' }));
+      if (!recent || !recent.length) rc.append(h('p', { className: 'muted', style: 'margin:10px 0 0', textContent: 'Nothing yet.' }));
+      (recent || []).slice(0, 8).forEach(r => rc.append(h('div', { className: 'res row' },
+        h('div', { className: 'nm', textContent: activityLine(r) }),
+        h('span', { className: 'when', textContent: r.time ? new Date(r.time).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '' }))));
+      tiles.append(rc);
       body.append(tiles);
 
       body.append(h('div', { className: 'facts', style: 'margin-top:16px' },
@@ -1272,6 +1389,8 @@
         callServer('getStock').then(d => renderManageItems(d.items)).catch(fail);
       } else if (manageMode === 'reports') {
         callServer('listReports').then(list => { renderManageReports(list); showReportBanner(list); }).catch(fail);
+      } else if (manageMode === 'staff') {
+        callServer('getStaff').then(r => renderManageStaff(r.names)).catch(fail);
       }
     }
 
@@ -1293,6 +1412,20 @@
         draw();
         manage.append(row);
       });
+    }
+
+    function renderManageStaff(names) {
+      manage.innerHTML = '';
+      manage.append(h('h4', { textContent: 'Staff names (' + names.length + ')' }),
+        h('p', { className: 'muted', textContent: 'These show as buttons on the staff page, so nobody has to type a name. A name that is not here is saved as "Bisita: name".' }));
+      const input = h('input', { placeholder: 'Name (for example Juan Dela Cruz)' });
+      const add = () => { const v = input.value.trim(); if (!v) return; act('addStaff', [v], refreshManage); };
+      input.onkeydown = e => { if (e.key === 'Enter') add(); };
+      manage.append(input, h('button', { className: 'primary', textContent: 'Add name', onclick: add }));
+      if (!names.length) manage.append(h('p', { className: 'muted', textContent: 'No names yet. Until you add some, staff type their own name.' }));
+      names.forEach(n => manage.append(h('div', { className: 'row' },
+        h('span', { className: 'nm', textContent: n }),
+        confirmButton('Remove', 'Tap again', () => act('removeStaff', [n], refreshManage)))));
     }
 
     function renderManageTools(list) {
@@ -1798,15 +1931,24 @@
     document.querySelectorAll('.tabs .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'home'));
     $('camHost-scan').append($('camBox'), $('camHelp'));
     renderTransfer();
-    loadLocs();
 
-    // Auto-open tool, item or location if navigated with ?id=, ?item= or ?loc=; otherwise show Home
-    if (window.location.search) {
-      loadReportBanner();
-      handleScan(window.location.search);
-    } else {
-      loadHome();
+    let started = false;
+    function startApp() {
+      document.body.classList.remove('locked');
+      loadLocs();
+      if (started) { if (activeTab === 'home') loadHome(); return; }
+      started = true;
+      // Auto-open tool, item or location if navigated with ?id=, ?item= or ?loc=; otherwise show Home
+      if (window.location.search) {
+        loadReportBanner();
+        handleScan(window.location.search);
+      } else {
+        loadHome();
+      }
     }
+
+    // Without a saved PIN the app stays locked until the admin types it.
+    if (!isConfigured() || PIN) startApp(); else showLock('');
   </script>
 </body>
 </html>
